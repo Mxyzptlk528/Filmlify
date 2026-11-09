@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Filmlify API Test</title>
+</head>
+<body>
+    <h1>Filmlify API Test</h1>
+
+    <button id="loadMovies">Load Movies</button>
+
+    <p id="message">Click the button to load movies.</p>
+    <ul id="movieList"></ul>
+
+    <script>
+        const API_KEY = "9bac28ec4c4699d299b9cc8039e654f7";
+
+        const button = document.getElementById("loadMovies");
+        const message = document.getElementById("message");
+        const movieList = document.getElementById("movieList");
+
+        // Turns an error number from TMDB into a message you can understand
+        function explain(status) {
+            if (status === 401) { return "TMDB rejected the API key (401). Check that it is copied correctly."; }
+            if (status === 404) { return "TMDB could not find that address (404)."; }
+            if (status === 429) { return "Too many requests (429). Wait a moment and try again."; }
+            return "TMDB returned error " + status + ".";
+        }
+
+        button.addEventListener("click", async function () {
+            message.textContent = "Loading movies...";
+            movieList.replaceChildren();
+
+            try {
+                const response = await fetch(
+                    "https://api.themoviedb.org/3/trending/movie/day?api_key=" + API_KEY
+                );
+
+                if (!response.ok) {
+                    throw new Error(explain(response.status));
+                }
+
+                const data = await response.json();
+
+                if (!data.results || data.results.length === 0) {
+                    throw new Error("TMDB answered, but the list of movies was empty.");
+                }
+
+                data.results.slice(0, 10).forEach(function (movie) {
+                    const item = document.createElement("li");
+
+                    // show the poster when TMDB has one
+                    if (movie.poster_path) {
+                        const img = document.createElement("img");
+                        img.src = "https://image.tmdb.org/t/p/w154" + movie.poster_path;
+                        img.alt = movie.title + " poster";
+                        item.appendChild(img);
+                        item.appendChild(document.createTextNode(" "));
+                    }
+
+                    item.appendChild(document.createTextNode(
+                        movie.title + " | Rating: " + movie.vote_average.toFixed(1)
+                    ));
+                    movieList.appendChild(item);
+                });
+
+                message.textContent = "Success! Movies loaded from TMDB.";
+            } catch (error) {
+                // "Failed to fetch" means no internet, a blocker/firewall, or a wrong address
+                if (error.message === "Failed to fetch") {
+                    message.textContent = "Could not reach TMDB. Check your internet connection or ad blocker.";
+                } else {
+                    message.textContent = "Something went wrong: " + error.message;
+                }
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>
