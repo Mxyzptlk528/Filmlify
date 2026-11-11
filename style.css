@@ -1173,3 +1173,736 @@ nav a {
         align-items: stretch;
     }
 }
+
+
+/* =====================================================================
+   DESIGN SYSTEM: typography, motion, states (added in the redesign)
+   ===================================================================== */
+:root {
+    --font: "Inter", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+    --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+    --shadow: 0 12px 30px #000000aa;
+    --glow: 0 0 24px #7b82e855;
+}
+
+/* ----- Typography ----- */
+body {
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea {
+    font-family: inherit;
+}
+
+h1 {
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+}
+
+h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+}
+
+h3 {
+    font-size: 1.05rem;
+    font-weight: 650;
+}
+
+h2 small {
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.hero h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 800;
+}
+
+.hero p {
+    max-width: 60ch;
+    color: #dfe2ff;
+}
+
+.card b {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.card small, .item small {
+    font-size: 12.5px;
+}
+
+nav a {
+    font-size: 14.5px;
+    font-weight: 600;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+nav a:hover {
+    color: #c9ceff;
+    border-bottom-color: #7b82e866;
+}
+
+.btn {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+label {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* ----- Page and toast fade ----- */
+@keyframes pageIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.page.active {
+    animation: pageIn 0.35s var(--ease);
+}
+
+#message {
+    display: block;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, 10px);
+    transition: opacity 0.25s, transform 0.25s, visibility 0.25s;
+    z-index: 80;
+}
+
+#message.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, 0);
+}
+
+#message.error {
+    background: #b3263a;
+}
+
+/* ----- Poster cards: zoom, lift, glow ----- */
+.row {
+    padding: 10px 6px 14px;
+    margin: -10px -6px -4px;
+    scroll-padding-left: 6px;
+    scroll-behavior: smooth;
+}
+
+.card {
+    transition: transform 0.25s var(--ease);
+}
+
+.card:hover {
+    transform: translateY(-4px) scale(1.03);
+    z-index: 3;
+}
+
+.card .poster {
+    transition: box-shadow 0.25s, background-size 0.45s var(--ease), outline-color 0.25s;
+}
+
+.card:hover .poster {
+    outline: none;
+    box-shadow: var(--shadow), var(--glow);
+}
+
+.card:hover .poster.has-image {
+    background-size: 108% 108%;
+}
+
+.quick {
+    display: flex;
+    opacity: 0;
+    transform: translateY(6px);
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.card:hover .quick, .card:focus-within .quick {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+}
+
+.quick button {
+    transition: transform 0.15s, background-color 0.15s;
+}
+
+.quick button:hover {
+    transform: scale(1.12);
+    background: #5a67e0;
+}
+
+.quick button:active {
+    transform: scale(0.92);
+}
+
+/* ----- Buttons, inputs, stars ----- */
+.btn {
+    transition: transform 0.15s var(--ease), box-shadow 0.2s, background-color 0.2s, border-color 0.2s;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    background-color: #5460c8;
+    box-shadow: 0 6px 18px #444fa866;
+}
+
+.btn.outline:hover {
+    background: #ffffff14;
+    box-shadow: none;
+}
+
+.btn:active {
+    transform: scale(0.97);
+    box-shadow: none;
+}
+
+.btn.is-on {
+    background: #2f8f6a;
+}
+
+.btn.outline.is-on {
+    background: #2f8f6a33;
+    border-color: #2f8f6a;
+}
+
+#search {
+    transition: box-shadow 0.2s, background-color 0.2s;
+}
+
+#search:focus {
+    outline: none;
+    background: #323c80;
+    box-shadow: 0 0 0 2px #7b82e8aa;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px #7b82e855;
+}
+
+.star-btn {
+    transition: transform 0.15s, color 0.15s;
+}
+
+.star-btn:hover {
+    transform: scale(1.2);
+}
+
+.star-btn:active {
+    transform: scale(0.9);
+}
+
+.item {
+    transition: border-color 0.2s, transform 0.2s;
+}
+
+.arrow {
+    transition: background-color 0.2s, transform 0.15s;
+}
+
+.arrow:active {
+    transform: translateY(-50%) scale(0.92);
+}
+
+.seat {
+    transition: transform 0.12s, background-color 0.15s;
+}
+
+.seat:not(.taken):hover {
+    transform: scale(1.2);
+}
+
+/* ----- Search drop-down and movie pop-up fade ----- */
+#suggestions {
+    display: block;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: opacity 0.18s, transform 0.18s, visibility 0.18s;
+}
+
+#suggestions.open {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+}
+
+.modal {
+    display: flex;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s, visibility 0.25s;
+}
+
+.modal.open {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-box {
+    transform: translateY(18px) scale(0.98);
+    transition: transform 0.3s var(--ease);
+}
+
+.modal.open .modal-box {
+    transform: none;
+}
+
+/* ----- Loading and empty states ----- */
+.spinner {
+    width: 28px;
+    height: 28px;
+    margin: 18px auto;
+    border: 3px solid #3a4488;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.empty {
+    padding: 34px 18px;
+    background: #ffffff06;
+}
+
+.empty p {
+    margin: 4px 0;
+}
+
+.empty .btn {
+    display: inline-block;
+    margin-top: 12px;
+}
+
+.empty-wide {
+    width: 100%;
+}
+
+.remove-btn {
+    width: 100%;
+    margin-top: 6px;
+}
+
+/* ----- Phones and touch screens ----- */
+@media (hover: none) {
+    .quick {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+    }
+
+    .quick button {
+        width: 30px;
+        height: 30px;
+    }
+
+    .card:hover {
+        transform: none;
+    }
+}
+
+@media (max-width:600px) {
+    #seats {
+        grid-template-columns: repeat(15, 30px);
+        overflow-x: auto;
+        justify-content: start;
+        padding-bottom: 6px;
+    }
+
+    #menuBtn {
+        padding: 8px 10px;
+    }
+
+    .modal {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    .modal-box {
+        max-height: 92vh;
+        border-radius: 16px 16px 0 0;
+        transform: translateY(40px);
+    }
+
+    h2 {
+        font-size: 1.15rem;
+    }
+
+    .hero {
+        min-height: 220px;
+        padding: 22px;
+    }
+
+    .stats b {
+        font-size: 22px;
+    }
+}
+
+/* ----- Respect people who turn animations off ----- */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
+
+    .card:hover {
+        transform: none;
+    }
+}
+
+
+/* =====================================================================
+   THEATER: booking panel, seat map, payment pop-up, tickets
+   ===================================================================== */
+.book-movie {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.book-poster {
+    width: 120px;
+    flex: none;
+    aspect-ratio: 2 / 3;
+    border-radius: 10px;
+    background: linear-gradient(160deg, #4b55b8, #161c45) center / cover no-repeat;
+}
+
+.book-info {
+    min-width: 0;
+}
+
+.book-info h2 {
+    margin: 0 0 6px;
+    border: 0;
+}
+
+.book-info p {
+    margin: 4px 0;
+    color: #c9cffc;
+}
+
+#bookOverview {
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+#bookBody[hidden], #bookEmpty[hidden] {
+    display: none;
+}
+
+#bookEmpty {
+    margin: 0;
+    padding: 36px 16px;
+    text-align: center;
+}
+
+.times button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.seat-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px 24px;
+    align-items: flex-start;
+    margin-top: 14px;
+}
+
+.seat-legend {
+    flex: 0 0 150px;
+}
+
+.seat-legend h3 {
+    margin: 0 0 12px;
+}
+
+.seat-legend p {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0;
+}
+
+.swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: inline-grid;
+    place-items: center;
+    font-style: normal;
+    font-size: 12px;
+    flex: none;
+}
+
+.swatch.free, .swatch.wheel {
+    background: #6f84d8;
+    color: #fff;
+}
+
+.swatch.mine {
+    background: #e5283c;
+}
+
+.swatch.gone {
+    background: #2a336e;
+}
+
+.seat-map {
+    flex: 1 1 340px;
+    min-width: 0;
+}
+
+.screen {
+    text-align: center;
+    padding: 6px 0;
+    margin: 0 0 14px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    background: #3a4488;
+    color: #fff;
+    border-radius: 40px 40px 0 0;
+}
+
+#seats {
+    display: block;
+    max-width: none;
+    margin: 0;
+}
+
+.seat-row {
+    display: grid;
+    grid-template-columns: 22px repeat(15, minmax(0, 1fr));
+    gap: 5px;
+    margin-bottom: 5px;
+    align-items: center;
+}
+
+.row-label {
+    text-align: center;
+    font-size: 13px;
+    color: #c9cffc;
+}
+
+.seat.wheelchair {
+    font-size: 11px;
+    line-height: 1;
+    padding: 0;
+}
+
+.summary p span:first-child {
+    color: #aab3ec;
+}
+
+/* ----- Payment pop-up ----- */
+#payModal {
+    z-index: 70;
+}
+
+#payModal .modal-box {
+    max-width: 520px;
+}
+
+#payModal h2 {
+    margin: 0 0 14px;
+    border: 0;
+}
+
+.pay-receipt {
+    background: #141a40;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 6px 16px;
+    margin-bottom: 4px;
+}
+
+.pay-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 9px 0;
+    border-bottom: 1px solid #ffffff14;
+    font-size: 15px;
+}
+
+.pay-row span {
+    color: #aab3ec;
+    flex: none;
+}
+
+.pay-row b {
+    text-align: right;
+    color: #fff;
+    font-weight: 600;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pay-row.pay-total {
+    border-bottom: 0;
+    padding: 12px 0 8px;
+}
+
+.pay-row.pay-total span {
+    color: #fff;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.pay-row.pay-total b {
+    font-size: 22px;
+    color: #8f9bff;
+}
+
+#payModal .pay-label {
+    display: block;
+    margin: 16px 0 7px;
+    font-size: 14px;
+    color: #c9cffc;
+}
+
+.pay-methods {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.pay-method {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 12px 8px;
+    cursor: pointer;
+    color: #fff;
+    background: #1a2252;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    transition: border-color 0.15s, background-color 0.15s, transform 0.15s;
+}
+
+.pay-method b {
+    font-size: 16px;
+}
+
+.pay-method small {
+    color: #aab3ec;
+    font-size: 12px;
+}
+
+.pay-method:hover {
+    border-color: #6f7bd8;
+}
+
+.pay-method:active {
+    transform: scale(0.97);
+}
+
+.pay-method.on {
+    border-color: #8f9bff;
+    background: #27307a;
+    box-shadow: 0 0 0 3px #4b55b855;
+}
+
+#payModal input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 16px;
+    color: #fff;
+    background: #0f1530;
+    border: 1px solid #4b55b8;
+    border-radius: 10px;
+}
+
+.pay-two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.pay-note {
+    margin: 16px 0 0;
+    font-size: 13px;
+    color: #aab3ec;
+    text-align: center;
+}
+
+#payModal .error {
+    min-height: 20px;
+    margin: 8px 0 0;
+    text-align: center;
+}
+
+#payModal .btn.wide {
+    margin-top: 10px;
+    font-size: 16px;
+}
+
+.item.booking {
+    align-items: center;
+}
+
+@media (max-width:600px) {
+    .seat-map {
+        overflow-x: auto;
+        padding-bottom: 6px;
+    }
+
+    .seat-row {
+        grid-template-columns: 22px repeat(15, 26px);
+        min-width: max-content;
+    }
+
+    .seat-legend {
+        flex: 1 1 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 12px;
+    }
+
+    .seat-legend h3 {
+        grid-column: 1 / -1;
+        margin-bottom: 4px;
+    }
+
+    .pay-two {
+        grid-template-columns: 1fr;
+    }
+
+    .pay-methods {
+        gap: 8px;
+    }
+
+    .book-poster {
+        width: 90px;
+    }
+}
+
+/* Keep the top of the booking panel visible below the sticky menu after "Book Now" */
+#bookPanel {
+    scroll-margin-top: 84px;
+}
+
+@media (max-width:850px) {
+    #bookPanel {
+        scroll-margin-top: 214px;
+    }
+}

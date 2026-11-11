@@ -1,7 +1,12 @@
-var SUPABASE_URL = "https://syuzulohxubhliafuqkq.supabase.co";
-var SUPABASE_KEY = "sb_publishable_UnUcB1v4omYreAwClYtxZA_dpLiUjHi";
+/* ============ SETTINGS: YOUR ONLINE DATABASE (SUPABASE) ============ */
+// Leave both empty to keep using the browser-only demo accounts.
+// Fill both in (see database-setup.sql and the steps I gave you) to use real, shared accounts.
+var SUPABASE_URL = "https://syuzulohxubhliafuqkq.supabase.co";    // for example "https://abcdefgh.supabase.co"
+var SUPABASE_KEY = "sb_publishable_UnUcB1v4omYreAwClYtxZA_dpLiUjHi";    // the PUBLISHABLE key, starts with sb_publishable_ (never the secret key!)
 var CLOUD = SUPABASE_URL !== "" && SUPABASE_KEY !== "";
 
+/* ============ 0. SPEED: REMEMBER TMDB ANSWERS DURING YOUR VISIT ============ */
+// Asking TMDB for the same thing twice is slow, so answers are saved until you close the tab.
 var realFetch = window.fetch.bind(window);
 window.fetch = async function (url, options) {
   if (typeof url === "string" && url.indexOf("https://api.themoviedb.org") === 0) {
@@ -17,16 +22,21 @@ window.fetch = async function (url, options) {
   return realFetch(url, options);
 };
 
+/* ============ 0b. ALWAYS START ON THE HOME PAGE ============ */
+// (after logging in or out the page reloads and goes back to where you were)
 (function () {
   var go = null;
   try { go = sessionStorage.getItem("goto"); sessionStorage.removeItem("goto"); } catch (e) {}
   history.replaceState(null, "", go || "#home");
 })();
 
+/* ============ 1. SHOW ONE PAGE AT A TIME ============ */
+// Each page is a <div class="page" id="...">. The link (#movies, #tv ...) decides which one shows.
 function showPage() {
   var name = location.hash.replace("#", "") || "home";
   if (!document.getElementById(name)) { name = "home"; }
 
+  // The Profile needs a login. The Login page is pointless if you are already logged in.
   if ((name === "profile" || name === "people") && !currentUser()) {
     returnTo = "#" + name;
     showMessage("Please log in to see this page.");
@@ -39,6 +49,7 @@ function showPage() {
     page.classList.toggle("active", page.id === name);
   });
 
+  // Highlight the menu link (the login page highlights "Profile")
   var menuName = (name === "login") ? "profile" : name;
   document.querySelectorAll("nav a").forEach(function (link) {
     link.classList.toggle("active", link.getAttribute("href") === "#" + menuName);
@@ -48,42 +59,66 @@ function showPage() {
 window.addEventListener("hashchange", showPage);
 showPage();
 
-function showMessage(text) {
+/* ============ 2. SMALL POP-UP MESSAGE ============ */
+function showMessage(text, kind) {
   var box = document.getElementById("message");
   box.textContent = text;
-  box.style.display = "block";
-  setTimeout(function () { box.style.display = "none"; }, 2500);
+  box.className = "show" + (kind === "error" ? " error" : "");
+  clearTimeout(showMessage.timer);
+  showMessage.timer = setTimeout(function () { box.className = ""; }, 2800);
 }
 
+/* ============ 3. "ADD TO LIST" BUTTONS ============ */
 document.querySelectorAll(".add").forEach(function (button) {
   button.onclick = function () { showMessage("Done! (Connect a database to save this.)"); };
 });
 
-var TICKET_PRICE = 340;
-var TAKEN = ["D6", "E10", "F5", "F6", "C12"];
-var chosen = ["E7", "E6"];
+/* ============ 4. SEARCH ============ */
+// The search drop-down list is in section 10 at the bottom of this file.
+
+/* ============ 5. THEATER: SEATS, DATE AND SHOWTIMES ============ */
+var TICKET_PRICE = 340;      // price of one seat in pesos (database-bookings.sql uses 340 too)
+var chosen = [];             // seats the visitor picked
+var bookedSeats = [];        // seats other people already booked for this showtime
+var lastSeatKey = "";
 var seatBox = document.getElementById("seats");
 
+// make rows A-H with 15 seats each (A6 to A10 are wheelchair spaces)
 "ABCDEFGH".split("").forEach(function (row) {
+  var rowDiv = document.createElement("div"); rowDiv.className = "seat-row";
+  var letter = document.createElement("span"); letter.className = "row-label"; letter.textContent = row;
+  rowDiv.appendChild(letter);                       // the row letter (A to H) on the left
   for (var n = 1; n <= 15; n++) {
-    var id = row + n;
     var seat = document.createElement("button");
     seat.className = "seat";
-    seat.title = id;
-    if (TAKEN.includes(id)) { seat.classList.add("taken"); }
-    if (chosen.includes(id)) { seat.classList.add("selected"); }
+    seat.title = row + n;
+    seat.setAttribute("aria-label", "Seat " + row + n);
+    if (row === "A" && n >= 6 && n <= 10) { seat.classList.add("wheelchair"); seat.textContent = "♿"; }
     seat.onclick = function () {
       var seatId = this.title;
       if (this.classList.contains("taken")) { return; }
       this.classList.toggle("selected");
       if (chosen.includes(seatId)) { chosen.splice(chosen.indexOf(seatId), 1); }
-      else { chosen.push(seatId); }
+      else {
+        if (chosen.length >= 10) { this.classList.remove("selected"); showMessage("You can book up to 10 seats at a time.", "error"); return; }
+        chosen.push(seatId);
+      }
       updateSummary();
     };
-    seatBox.appendChild(seat);
+    rowDiv.appendChild(seat);
   }
+  seatBox.appendChild(rowDiv);
 });
+// seat numbers (1 to 15) under the last row
+var numberRow = document.createElement("div"); numberRow.className = "seat-row";
+numberRow.appendChild(document.createElement("span"));
+for (var num = 1; num <= 15; num++) {
+  var label = document.createElement("span"); label.className = "row-label"; label.textContent = num;
+  numberRow.appendChild(label);
+}
+seatBox.appendChild(numberRow);
 
+// time buttons
 document.querySelectorAll("#times button").forEach(function (b) {
   b.onclick = function () {
     document.querySelectorAll("#times button").forEach(function (x) { x.classList.remove("chosen"); });
@@ -92,27 +127,86 @@ document.querySelectorAll("#times button").forEach(function (b) {
   };
 });
 
+// One showtime = movie + cinema + date + time. Seats are saved against this key.
+function bookingKey() {
+  var chosenTime = document.querySelector("#times .chosen");
+  return [document.getElementById("bookTitle").textContent, document.getElementById("cinema").value,
+          document.getElementById("date").value, chosenTime ? chosenTime.textContent : ""].join("|");
+}
+function paintSeats() {
+  document.querySelectorAll("#seats .seat").forEach(function (b) {
+    b.classList.toggle("taken", bookedSeats.includes(b.title));
+    b.classList.toggle("selected", chosen.includes(b.title));
+  });
+}
 function updateSummary() {
+  if (bookingKey() !== lastSeatKey) { lastSeatKey = bookingKey(); chosen = []; bookedSeats = []; paintSeats(); loadBookedSeats(); }
+  var chosenTime = document.querySelector("#times .chosen");
+  document.getElementById("sumMovie").textContent = document.getElementById("bookTitle").textContent;
   document.getElementById("sumCinema").textContent = document.getElementById("cinema").value;
+  var d = document.getElementById("date").value.split("-");
   document.getElementById("sumTime").textContent =
-    document.getElementById("date").value + " • " + document.querySelector("#times .chosen").textContent;
+    (d.length === 3 ? new Date(+d[0], +d[1] - 1, +d[2]).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric", weekday: "short" }) : "") +
+    " • " + (chosenTime ? chosenTime.textContent : "");
   document.getElementById("sumSeats").textContent = chosen.join(", ") || "None";
   document.getElementById("sumTotal").textContent = "₱ " + (chosen.length * TICKET_PRICE).toFixed(2);
 }
 document.getElementById("cinema").onchange = updateSummary;
-document.getElementById("date").onchange = updateSummary;
-document.getElementById("payBtn").onclick = function () {
-  if (!requireLogin("book tickets")) { return; }
-  showMessage("Add your payment system here.");
-};
-updateSummary();
 
+// ---- Real date and time (Philippine time): today by default; showtimes that already started are disabled ----
+function manilaNow() { return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" })); }
+function pad2(n) { return String(n).padStart(2, "0"); }
+function isoOf(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+function todayISO() { return isoOf(manilaNow()); }
+function minutesOf(label) {
+  var p = label.match(/(\d+):(\d+) (AM|PM)/), h = (+p[1]) % 12 + (p[3] === "PM" ? 12 : 0);
+  return h * 60 + (+p[2]);
+}
+function showHasStarted(date, time) {
+  var now = manilaNow(), today = isoOf(now);
+  if (date < today) { return true; }
+  if (date > today) { return false; }
+  return minutesOf(time) <= now.getHours() * 60 + now.getMinutes();
+}
+function refreshTimes() {
+  var dateBox = document.getElementById("date");
+  var now = manilaNow(), nowMin = now.getHours() * 60 + now.getMinutes();
+  var buttons = Array.from(document.querySelectorAll("#times button"));
+  buttons.forEach(function (b) {
+    b.disabled = dateBox.value === todayISO() && minutesOf(b.textContent) <= nowMin;
+  });
+  var open = buttons.filter(function (b) { return !b.disabled; });
+  if (open.length === 0) {                       // no more shows today: go to tomorrow
+    var next = manilaNow(); next.setDate(next.getDate() + 1);
+    dateBox.value = isoOf(next);
+    return refreshTimes();
+  }
+  var chosenBtn = document.querySelector("#times .chosen");
+  if (!chosenBtn || chosenBtn.disabled) {
+    buttons.forEach(function (x) { x.classList.remove("chosen"); });
+    open[0].classList.add("chosen");
+  }
+}
+(function () {
+  var dateBox = document.getElementById("date");
+  var last = manilaNow(); last.setDate(last.getDate() + 30);
+  dateBox.min = todayISO(); dateBox.max = isoOf(last); dateBox.value = todayISO();
+  refreshTimes(); updateSummary();
+})();
+document.getElementById("date").onchange = function () {
+  if (this.value < todayISO()) { this.value = todayISO(); showMessage("You can only book today or a later date.", "error"); }
+  refreshTimes(); updateSummary();
+};
+
+/* ============ 6. LOGIN FORM ============ */
 var signUpMode = false;
 
+// show / hide password
 document.getElementById("showPass").onchange = function () {
   document.getElementById("pass").type = this.checked ? "text" : "password";
 };
 
+// switch between Sign In and Sign Up
 document.getElementById("switchLink").onclick = function (e) {
   e.preventDefault();
   signUpMode = !signUpMode;
@@ -124,6 +218,7 @@ document.getElementById("switchLink").onclick = function (e) {
   this.textContent = signUpMode ? "Sign In" : "Sign Up";
 };
 
+// check the form when the button is pressed
 document.getElementById("loginForm").onsubmit = async function (e) {
   e.preventDefault();
   var user = document.getElementById("user").value.trim();
@@ -142,7 +237,7 @@ document.getElementById("loginForm").onsubmit = async function (e) {
 
   if (!errors.user && !errors.email && !errors.pass) {
     if (CLOUD) {
-      var problem = await cloudAuth(signUpMode, user, email, pass);
+      var problem = await cloudAuth(signUpMode, user, email, pass);     // "" when it worked (the page reloads)
       if (problem) { document.getElementById("passError").textContent = problem; }
       return;
     }
@@ -169,17 +264,23 @@ document.getElementById("loginForm").onsubmit = async function (e) {
   document.getElementById("passError").textContent = errors.pass;
 };
 
+// Google button (needs a Google account setup + server to really work)
 document.getElementById("googleBtn").onclick = function () {
   showMessage("Google sign-in needs setup first.");
 };
 
+
+/* ============ 7. TMDB API: REAL POSTERS AND BACKGROUNDS ============ */
+// NOTE: anyone can see this key in the page source. Fine for a personal project;
+// for a public website, move the API calls to a server.
 var TMDB_KEY = "9bac28ec4c4699d299b9cc8039e654f7";
 var TMDB_URL = "https://api.themoviedb.org/3";
-var POSTER_URL = "https://image.tmdb.org/t/p/w342";
-var PROFILE_URL = "https://image.tmdb.org/t/p/w185";
-var BACKDROP_URL = "https://image.tmdb.org/t/p/w1280";
-var searchCache = {};
+var POSTER_URL = "https://image.tmdb.org/t/p/w342";      // poster size
+var PROFILE_URL = "https://image.tmdb.org/t/p/w185";    // people photos
+var BACKDROP_URL = "https://image.tmdb.org/t/p/w1280";   // big background size
+var searchCache = {};                                    // remembers titles we already looked up
 
+// Look up a title (movie or TV show) and return the best match, or null if none
 async function searchTMDB(title) {
   if (title in searchCache) { return searchCache[title]; }
   try {
@@ -193,11 +294,13 @@ async function searchTMDB(title) {
     return searchCache[title];
   } catch (error) {
     console.error("TMDB lookup failed for '" + title + "':", error);
-    return null;
+    return null;      // the card simply keeps its colored placeholder
   }
 }
 
+// Put a real poster on every card (6 at a time, to stay under TMDB's request limit)
 async function loadPosters() {
+  // only cards that do not have a poster yet
   var cards = Array.from(document.querySelectorAll(".card")).filter(function (card) {
     return !card.querySelector(".has-image");
   });
@@ -213,6 +316,7 @@ async function loadPosters() {
   }
 }
 
+// Put a real background on every banner that has data-title="..."
 async function loadBackdrops() {
   var banners = document.querySelectorAll(".hero[data-title]");
   for (var i = 0; i < banners.length; i++) {
@@ -226,16 +330,18 @@ async function loadBackdrops() {
   }
 }
 
+// The three hover buttons use drawn icons (not text symbols) so they sit perfectly centered
 var QUICK_ICONS = {
   like: '<svg viewBox="0 0 24 24"><path d="M12 20.5l-1.2-1.1C5.9 15.1 3 12.4 3 9a4.5 4.5 0 0 1 8-2.8h2A4.5 4.5 0 0 1 21 9c0 3.4-2.9 6.1-7.8 10.4z"/></svg>',
   watched: '<svg viewBox="0 0 24 24"><path d="M5 12.500l4.500 4.500L19 7.500"/></svg>',
   watchlist: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>'
 };
 
+// Make one poster card from a movie/show that TMDB sent us
 function makeCard(m) {
   var card = document.createElement("div");
   card.className = "card";
-  card.dataset.key = remember(m);
+  card.dataset.key = remember(m);   // so a click can open this movie's pop-up
 
   var poster = document.createElement("div");
   poster.className = "poster has-image";
@@ -249,7 +355,7 @@ function makeCard(m) {
   var rating = m.vote_average ? "★ " + m.vote_average.toFixed(1) + " • " : "";
   info.textContent = rating + date.slice(0, 4);
 
-  var quick = document.createElement("div");
+  var quick = document.createElement("div");            // buttons that appear when you hover a poster
   quick.className = "quick";
   [["♥", "like", "Like"], ["✓", "watched", "Mark as watched"], ["+", "watchlist", "Add to watchlist"]].forEach(function (b) {
     var button = document.createElement("button");
@@ -267,6 +373,8 @@ function makeCard(m) {
   return card;
 }
 
+// Every row that has data-source="..." in index.html gets filled with up to 20 titles.
+// To change what a row shows, change its data-source (for example /movie/popular).
 async function fillRows() {
   var rows = Array.from(document.querySelectorAll(".row[data-source]"));
   await Promise.all(rows.map(async function (row) {
@@ -277,7 +385,7 @@ async function fillRows() {
       if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
       var data = await response.json();
       var items = (data.results || []).filter(function (m) { return m.poster_path; });
-      if (items.length === 0) { return; }
+      if (items.length === 0) { return; }       // keep the cards typed in index.html
       row.replaceChildren();
       items.forEach(function (m) { row.appendChild(makeCard(m)); });
       row.scrollLeft = 0;
@@ -288,15 +396,20 @@ async function fillRows() {
 }
 
 async function loadEverything() {
-  fillEpisodes();
-  await Promise.all([fillRows(), fillPeople()]);
-  loadPosters();
-  loadBackdrops();
-  loadIcons();
-  updateAllArrows();
+  fillEpisodes();          // 0. New Episodes This Week (loads by itself)
+  await Promise.all([fillRows(), fillPeople()]);   // 1. long rows + trending people from TMDB
+  addBookNowButtons();      // 1b. "Book Now" under every Now Showing poster
+  loadPosters();            // 2. posters for any cards typed by hand (like your Profile)
+  loadBackdrops();          // 3. banner backgrounds
+  loadIcons();              // 3b. small pictures (news, spotlight, directors)
+  updateAllArrows();        // 4. refresh the slider arrows (from section 8)
 }
 loadEverything();
 
+
+/* ============ 8. SLIDER ARROWS ON EVERY POSTER ROW ============ */
+// For each row of posters, this adds a "<" and a ">" button that slide the row.
+// How far one arrow click slides: a whole number of cards, so posters always line up neatly
 function cardStep(row) {
   var first = row.firstElementChild;
   if (!first) { return row.clientWidth; }
@@ -308,6 +421,7 @@ function cardStep(row) {
 var allRows = document.querySelectorAll(".row");
 
 allRows.forEach(function (row) {
+  // wrap the row in a box so the arrows can sit on top of it
   var slider = document.createElement("div");
   slider.className = "slider";
   row.parentNode.insertBefore(slider, row);
@@ -326,6 +440,7 @@ allRows.forEach(function (row) {
   slider.appendChild(row);
   slider.appendChild(rightArrow);
 
+  // slide by about 80% of the visible width each click
   leftArrow.onclick = function () {
     row.scrollBy({ left: -cardStep(row), behavior: "smooth" });
   };
@@ -333,6 +448,7 @@ allRows.forEach(function (row) {
     row.scrollBy({ left: cardStep(row), behavior: "smooth" });
   };
 
+  // show or hide the arrows depending on whether there is more to scroll to
   row.updateArrows = function () {
     var canScroll = row.scrollWidth > row.clientWidth + 1;
     leftArrow.classList.toggle("hidden", !canScroll || row.scrollLeft <= 0);
@@ -345,13 +461,15 @@ function updateAllArrows() {
   allRows.forEach(function (row) { row.updateArrows(); });
 }
 window.addEventListener("resize", updateAllArrows);
-window.addEventListener("hashchange", updateAllArrows);
-document.getElementById("search").addEventListener("input", updateAllArrows);
+window.addEventListener("hashchange", updateAllArrows);                // a different page was opened
+document.getElementById("search").addEventListener("input", updateAllArrows);  // search hid some posters
 updateAllArrows();
 
-var known = {};
-var current = null;
-var chosenStars = 0;
+
+/* ============ 9. MOVIE POP-UP, REVIEWS AND WATCHLIST ============ */
+var known = {};         // every movie/show we have seen, saved under a key like "movie-550"
+var current = null;     // the movie/show that is open in the pop-up
+var chosenStars = 0;    // the rating picked in the pop-up (1 to 5)
 
 function remember(m) {
   m.media_type = m.media_type || (m.first_air_date !== undefined ? "tv" : "movie");
@@ -363,9 +481,11 @@ function nameOf(m) { return m.title || m.name; }
 function yearOf(m) { return (m.release_date || m.first_air_date || "").slice(0, 4); }
 function starText(n) { return "★".repeat(n) + "☆".repeat(5 - n); }
 
+// Reviews and watchlist are saved in the browser (localStorage), so they stay after refreshing.
+// To keep them on a server later, replace these two functions.
 function getList(name) {
-  var key = userKey(name);
-  if (!key) { return []; }
+  var key = userKey(name);                       // every account has its own reviews, watchlist, etc.
+  if (!key) { return []; }                       // nobody is logged in
   try { return JSON.parse(localStorage.getItem(key)) || []; } catch (e) { return []; }
 }
 function saveList(name, list) {
@@ -375,6 +495,7 @@ function saveList(name, list) {
   catch (e) { showMessage("Could not save: your browser blocked storage."); }
 }
 
+// Build one review row for the page
 function reviewElement(r, showTitle) {
   var row = document.createElement("div");
   row.className = "item";
@@ -399,7 +520,7 @@ function reviewElement(r, showTitle) {
   inner.appendChild(document.createElement("br"));
   inner.appendChild(date);
 
-  if (showTitle) {
+  if (showTitle) {                                   // Profile reviews get a small poster icon
     var thumb = document.createElement("div");
     thumb.className = "pic tall";
     if (r.poster) {
@@ -409,7 +530,7 @@ function reviewElement(r, showTitle) {
     row.classList.add("with-pic");
     row.appendChild(thumb);
   }
-  var del = document.createElement("button");
+  var del = document.createElement("button");        // delete this review
   del.className = "btn small";
   del.textContent = "✕";
   del.title = "Delete review";
@@ -425,37 +546,20 @@ function reviewElement(r, showTitle) {
   return row;
 }
 
+// Fill the Profile page (reviews + watchlist)
 function renderProfile() {
-  updateStats();
-  renderGenres();
-  ensureReviewIds();
+  updateStats();       // the numbers at the top of the Profile
+  renderGenres();      // the Favorite Genre bars
+  ensureReviewIds();   // older reviews get an id so they can be deleted
   renderCustomLists();
-  renderFavorites();
+  renderFavorites();   // your favorite films and shows
   var reviewBox = document.getElementById("reviewList");
   reviewBox.replaceChildren();
-  var reviews = getList("filmlify_reviews").slice().reverse();
+  var reviews = getList("filmlify_reviews").slice().reverse();      // newest first
   if (reviews.length === 0) { reviewBox.textContent = "No reviews yet. Click any poster to write one."; }
   reviews.forEach(function (r) { reviewBox.appendChild(reviewElement(r, true)); });
 
-  var listBox = document.getElementById("myWatchlist");
-  listBox.replaceChildren();
-  getList("filmlify_watchlist").forEach(function (w) {
-    var row = document.createElement("div");
-    row.className = "item";
-    var label = document.createElement("span");
-    label.textContent = w.title + (w.year ? " (" + w.year + ")" : "");
-    var remove = document.createElement("button");
-    remove.className = "btn";
-    remove.textContent = "Remove";
-    remove.onclick = function () {
-      saveList("filmlify_watchlist", getList("filmlify_watchlist").filter(function (x) { return x.key !== w.key; }));
-      renderProfile();
-      paintWatchlistButton();
-    };
-    row.appendChild(label);
-    row.appendChild(remove);
-    listBox.appendChild(row);
-  });
+  renderCollections();     // Watchlist and Watched sections
 }
 
 function paintStars() {
@@ -465,6 +569,7 @@ function paintStars() {
 }
 
 function paintReviews() {
+  if (CLOUD) { paintCommunityReviews(); return; }     // online: show everybody's reviews with usernames
   var box = document.getElementById("mReviews");
   box.replaceChildren();
   var key = current.media_type + "-" + current.id;
@@ -478,6 +583,7 @@ function paintWatchlistButton() {
   var key = current.media_type + "-" + current.id;
   var inList = getList("filmlify_watchlist").some(function (w) { return w.key === key; });
   document.getElementById("mWatchlist").textContent = inList ? "✓ In Watchlist (click to remove)" : "+ Add to Watchlist";
+  document.getElementById("mWatchlist").classList.toggle("is-on", inList);
 }
 
 function toggleWatchlist(m) {
@@ -489,25 +595,28 @@ function toggleWatchlist(m) {
     list = list.filter(function (w) { return w.key !== key; });
     showMessage("Removed from your watchlist.");
   } else {
-    list.push({ key: key, title: nameOf(m), year: yearOf(m) });
+    list.push(Object.assign({}, slim(m), { key: key, title: nameOf(m), year: yearOf(m) }));
     showMessage("Added to your watchlist!");
   }
   saveList("filmlify_watchlist", list);
+  if (exists) { cloudListRemove("watchlist", key); } else { cloudListAdd("watchlist", m); }
   renderProfile();
   paintWatchlistButton();
 }
 
+// Open the pop-up for a movie/show
 function openMovie(m) {
   remember(m);
   current = m;
-  chosenStars = 0;
+  var mine = getList("filmlify_reviews").find(function (r) { return r.key === m.media_type + "-" + m.id; });
+  chosenStars = mine ? mine.stars : 0;               // your old review (if any) is loaded so you can edit it
   document.getElementById("mTitle").textContent = nameOf(m);
   document.getElementById("mMeta").textContent =
     (m.media_type === "tv" ? "TV Show" : "Movie") + (yearOf(m) ? " • " + yearOf(m) : "") +
     (m.vote_average ? " • ★ " + m.vote_average.toFixed(1) : "");
   document.getElementById("mOverview").textContent = m.overview || "No description available.";
   document.getElementById("mPoster").style.backgroundImage = m.poster_path ? "url(" + POSTER_URL + m.poster_path + ")" : "none";
-  document.getElementById("reviewText").value = "";
+  document.getElementById("reviewText").value = mine ? mine.text : "";
   document.getElementById("reviewError").textContent = "";
   paintStars();
   paintReviews();
@@ -520,10 +629,11 @@ function openMovie(m) {
 }
 function closeMovie() { document.getElementById("modal").classList.remove("open"); }
 
+// Click a poster -> open its pop-up
 document.addEventListener("click", async function (e) {
   var card = e.target.closest(".card");
   if (!card || e.target.closest(".quick")) { return; }
-  if (!card.dataset.key) {
+  if (!card.dataset.key) {                       // a card typed by hand: look it up first
     var found = await searchTMDB(card.querySelector("b").textContent);
     if (!found) { showMessage("Sorry, no details found for this title."); return; }
     card.dataset.key = remember(found);
@@ -531,6 +641,7 @@ document.addEventListener("click", async function (e) {
   openMovie(known[card.dataset.key]);
 });
 
+// Banner buttons: "More Info" opens the pop-up, "Add to List" adds to the watchlist
 document.querySelectorAll(".hero[data-title], .spotlight[data-title]").forEach(function (hero) {
   hero.querySelectorAll(".btn").forEach(function (button) {
     button.onclick = async function () {
@@ -542,6 +653,7 @@ document.querySelectorAll(".hero[data-title], .spotlight[data-title]").forEach(f
   });
 });
 
+// Pop-up buttons
 document.querySelectorAll(".star-btn").forEach(function (b) {
   b.onclick = function () {
     if (!requireLogin("write a review")) { return; }
@@ -553,41 +665,46 @@ document.getElementById("mWatchlist").onclick = function () { toggleWatchlist(cu
 document.getElementById("closeModal").onclick = closeMovie;
 document.getElementById("modal").onclick = function (e) { if (e.target === this) { closeMovie(); } };
 
+// The single "Done" button: saves (or updates) your review and closes the pop-up
 document.getElementById("postReview").onclick = function () {
   var text = document.getElementById("reviewText").value.trim();
 
-  if (chosenStars === 0 && text === "") { closeMovie(); return; }
+  if (chosenStars === 0 && text === "") { closeMovie(); return; }     // nothing to save, just close
   if (chosenStars === 0) {
     document.getElementById("reviewError").textContent = "Please pick a star rating first.";
     return;
   }
-
   if (!requireLogin("post a review")) { return; }
+
+  var key = current.media_type + "-" + current.id;
   var reviews = getList("filmlify_reviews");
-  reviews.push({
-    id: Date.now(),
-    key: current.media_type + "-" + current.id,
-    title: nameOf(current),
-    poster: current.poster_path || "",
-    genres: genreNames(current),
-    stars: chosenStars,
-    text: text,
-    date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-  });
+  var review = reviews.find(function (r) { return r.key === key; });       // one review per movie
+  var date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  var updated = !!review;
+  if (review) {
+    review.stars = chosenStars; review.text = text; review.date = date;
+    review.poster = current.poster_path || ""; review.genres = genreNames(current);
+  } else {
+    review = { id: Date.now(), key: key, title: nameOf(current), poster: current.poster_path || "",
+               genres: genreNames(current), stars: chosenStars, text: text, date: date };
+    reviews.push(review);
+  }
   saveList("filmlify_reviews", reviews);
-  cloudSaveReview(reviews[reviews.length - 1]);
-  addWatched(current);
+  cloudSaveReview(review);                  // also share it online (if the database is connected)
+  addWatched(current);                      // reviewing a movie counts it as watched
   renderProfile();
   closeMovie();
-  showMessage("Review saved! You can see it on your Profile.");
+  showMessage(updated ? "Review updated!" : "Review saved! You can see it on your Profile.");
 };
 renderProfile();
 
+/* ============ 10. SEARCH DROP-DOWN LIST ============ */
+// Type in the search box and a list of matching movies/shows appears underneath.
 var searchBox = document.getElementById("search");
 var suggestionBox = document.getElementById("suggestions");
 var searchTimer = null;
-var suggestions = [];
-var activeRow = -1;
+var suggestions = [];        // the movies/shows shown in the list
+var activeRow = -1;          // which row is highlighted with the arrow keys
 
 function hideSuggestions() {
   suggestionBox.classList.remove("open");
@@ -639,7 +756,7 @@ async function runSearch(text) {
     var response = await fetch(TMDB_URL + "/search/multi?query=" + encodeURIComponent(text) + "&api_key=" + TMDB_KEY);
     if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
     var data = await response.json();
-    if (searchBox.value.trim() !== text) { return; }
+    if (searchBox.value.trim() !== text) { return; }      // the person kept typing: ignore this old answer
     suggestions = (data.results || []).filter(function (m) {
       return m.media_type === "movie" || m.media_type === "tv";
     }).slice(0, 6);
@@ -654,7 +771,7 @@ searchBox.addEventListener("input", function () {
   clearTimeout(searchTimer);
   var text = searchBox.value.trim();
   if (text.length < 2) { hideSuggestions(); return; }
-  searchTimer = setTimeout(function () { runSearch(text); }, 300);
+  searchTimer = setTimeout(function () { runSearch(text); }, 300);   // wait until typing pauses
 });
 
 searchBox.addEventListener("keydown", function (e) {
@@ -663,15 +780,18 @@ searchBox.addEventListener("keydown", function (e) {
   else if (e.key === "Enter" && suggestions.length) { chooseSuggestion(suggestions[activeRow >= 0 ? activeRow : 0]); }
 });
 
-document.addEventListener("click", function (e) {
+document.addEventListener("click", function (e) {            // click anywhere else closes the list
   if (!e.target.closest(".search-wrap")) { hideSuggestions(); }
 });
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") { hideSuggestions(); closeMovie(); }
 });
 
+
+/* ============ 11. IMAGE ICONS: PEOPLE, NEWS, SPOTLIGHT, DIRECTORS ============ */
 var personCache = {};
 
+// Look up a person (actor, director...) and return the best match that has a photo
 async function searchPerson(name) {
   if (name in personCache) { return personCache[name]; }
   try {
@@ -686,6 +806,7 @@ async function searchPerson(name) {
   }
 }
 
+// Every <div class="pic" data-title="..."> gets a poster, every data-person="..." gets a photo
 async function loadIcons() {
   var icons = Array.from(document.querySelectorAll(".pic[data-title], .pic[data-person]"));
   await Promise.all(icons.map(async function (icon) {
@@ -704,6 +825,7 @@ async function loadIcons() {
   }));
 }
 
+// Trending People: replace the typed names with this week's trending people from TMDB
 async function fillPeople() {
   var row = document.getElementById("peopleRow");
   try {
@@ -736,6 +858,9 @@ async function fillPeople() {
   }
 }
 
+
+/* ============ 12. PROFILE NUMBERS, WATCHED, FOLLOW AND FAVORITE GENRES ============ */
+// TMDB sends genres as numbers. This list turns them into names.
 var GENRE_NAMES = {
   28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime", 99: "Documentary",
   18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
@@ -747,15 +872,17 @@ function genreNames(m) {
   return (m.genre_ids || []).map(function (id) { return GENRE_NAMES[id]; }).filter(Boolean);
 }
 
+// The five numbers at the top of the Profile. They start at 0 and grow as you use the site.
 function updateStats() {
   var cc = window.cloudCounts || { followers: 0, following: 0 };
-  document.getElementById("statFollowers").textContent = cc.followers;
-  document.getElementById("statFollowing").textContent = cc.following + getList("filmlify_following").length;
+  document.getElementById("statFollowers").textContent = cc.followers;      // real followers come from the database
+  document.getElementById("statFollowing").textContent = cc.following + getList("filmlify_following").length;   // people + stars you follow
   document.getElementById("statWatched").textContent = getList("filmlify_watched").length;
   document.getElementById("statReviews").textContent = getList("filmlify_reviews").length;
   document.getElementById("statWatchlist").textContent = getList("filmlify_watchlist").length;
 }
 
+// Favorite Genre: the percentages come from the genres of the movies/shows you reviewed
 function renderGenres() {
   var box = document.getElementById("genreBars");
   box.replaceChildren();
@@ -784,12 +911,14 @@ function renderGenres() {
   });
 }
 
+// Watched list
 function addWatched(m) {
   var key = m.media_type + "-" + m.id;
   var list = getList("filmlify_watched");
   if (!list.some(function (w) { return w.key === key; })) {
-    list.push({ key: key, title: nameOf(m) });
+    list.push(Object.assign({}, slim(m), { key: key, title: nameOf(m) }));
     saveList("filmlify_watched", list);
+    cloudListAdd("watched", m);
   }
 }
 function toggleWatched(m) {
@@ -798,6 +927,7 @@ function toggleWatched(m) {
   var list = getList("filmlify_watched");
   if (list.some(function (w) { return w.key === key; })) {
     saveList("filmlify_watched", list.filter(function (w) { return w.key !== key; }));
+    cloudListRemove("watched", key);
     showMessage("Removed from your watched list.");
   } else {
     addWatched(m);
@@ -811,9 +941,11 @@ function paintWatchedButton() {
   var key = current.media_type + "-" + current.id;
   var done = getList("filmlify_watched").some(function (w) { return w.key === key; });
   document.getElementById("mWatched").textContent = done ? "✓ Watched (click to undo)" : "Mark as Watched";
+  document.getElementById("mWatched").classList.toggle("is-on", done);
 }
 document.getElementById("mWatched").onclick = function () { toggleWatched(current); };
 
+// Follow buttons (next to Trending People and Popular Directors)
 function paintFollowButtons() {
   var following = getList("filmlify_following");
   document.querySelectorAll(".follow-btn").forEach(function (b) {
@@ -840,15 +972,19 @@ document.addEventListener("click", function (e) {
 paintFollowButtons();
 renderProfile();
 
+
+/* ============ 13. FIX OLD REVIEWS: ADD THEIR POSTER AND GENRES ============ */
+// Reviews saved before posters/genres were stored have neither. This asks TMDB for them
+// once, saves them, and the Profile then shows the movie image in Recent Reviews.
 async function fillMissingReviewData() {
   var reviews = getList("filmlify_reviews");
   var changed = false;
 
   for (var i = 0; i < reviews.length; i++) {
     var r = reviews[i];
-    if (!r.key || (r.poster !== undefined && r.genres !== undefined)) { continue; }
+    if (!r.key || (r.poster !== undefined && r.genres !== undefined)) { continue; }   // already complete
 
-    var parts = r.key.split("-");
+    var parts = r.key.split("-");                        // "movie-550" -> ["movie", "550"]
     try {
       var response = await fetch(TMDB_URL + "/" + parts[0] + "/" + parts[1] + "?api_key=" + TMDB_KEY);
       if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
@@ -868,16 +1004,19 @@ async function fillMissingReviewData() {
 }
 fillMissingReviewData();
 
+
+/* ============ 14. NEW EPISODES THIS WEEK (follows what is trending) ============ */
+// Returns the show's newest episode if it airs within a week of today, otherwise null
 function episodeThisWeek(details) {
   var DAY = 24 * 60 * 60 * 1000, now = Date.now();
   var next = details.next_episode_to_air, last = details.last_episode_to_air;
   if (next && next.air_date) {
     var t = new Date(next.air_date + "T00:00").getTime();
-    if (t >= now - DAY && t <= now + 7 * DAY) { return next; }
+    if (t >= now - DAY && t <= now + 7 * DAY) { return next; }       // coming up this week
   }
   if (last && last.air_date) {
     var t2 = new Date(last.air_date + "T00:00").getTime();
-    if (t2 >= now - 7 * DAY && t2 <= now + DAY) { return last; }
+    if (t2 >= now - 7 * DAY && t2 <= now + DAY) { return last; }     // aired in the last 7 days
   }
   return null;
 }
@@ -894,8 +1033,9 @@ async function fillEpisodes() {
     var response = await fetch(TMDB_URL + "/trending/tv/week?api_key=" + TMDB_KEY);
     if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
     var data = await response.json();
-    var shows = (data.results || []).slice(0, 12);
+    var shows = (data.results || []).slice(0, 12);          // look at the 12 most trending shows
 
+    // ask TMDB for each show's newest episode
     var found = await Promise.all(shows.map(async function (show) {
       var r = await fetch(TMDB_URL + "/tv/" + show.id + "?api_key=" + TMDB_KEY);
       if (!r.ok) { return null; }
@@ -903,13 +1043,13 @@ async function fillEpisodes() {
       return episode ? { show: show, episode: episode } : null;
     }));
     found = found.filter(Boolean).slice(0, 5);
-    if (found.length === 0) { return; }
+    if (found.length === 0) { return; }                     // keep the typed rows
 
     list.replaceChildren();
     found.forEach(function (f) {
       var row = document.createElement("div");
       row.className = "item with-pic";
-      row.dataset.key = remember(f.show);
+      row.dataset.key = remember(f.show);                    // clicking the row opens the show's pop-up
 
       var pic = document.createElement("div");
       pic.className = "pic tall";
@@ -941,16 +1081,20 @@ async function fillEpisodes() {
   }
 }
 
+// Click an episode row -> open that show's pop-up
 document.addEventListener("click", function (e) {
   var row = e.target.closest(".item[data-key]");
   if (row && known[row.dataset.key]) { openMovie(known[row.dataset.key]); }
 });
 
+
+/* ============ 15. CLICKABLE GENRE CARDS ============ */
+// TMDB's number for each TV genre. (TMDB has no "Thriller" TV genre, so it shows Crime + Mystery shows.)
 var TV_GENRE_IDS = {
   "Drama": "18", "Sci-Fi": "10765", "Crime": "80", "Animation": "16",
   "Thriller": "80,9648", "Comedy": "35", "Mystery": "9648", "Documentary": "99"
 };
-var genreClicks = 0;
+var genreClicks = 0;     // lets us ignore old answers if you click several genres quickly
 
 async function showGenre(card) {
   var name = card.textContent.trim();
@@ -961,7 +1105,7 @@ async function showGenre(card) {
   var row = document.getElementById("genreRow");
   document.getElementById("genreTitle").textContent = name + " TV Shows";
   section.hidden = false;
-  row.textContent = "Loading...";
+  row.replaceChildren(spinner());
 
   try {
     var url = TMDB_URL + "/discover/tv?with_genres=" + encodeURIComponent(TV_GENRE_IDS[name]) +
@@ -969,12 +1113,12 @@ async function showGenre(card) {
     var response = await fetch(url);
     if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
     var data = await response.json();
-    if (myClick !== genreClicks) { return; }
+    if (myClick !== genreClicks) { return; }                 // another genre was clicked meanwhile
 
     var items = (data.results || []).filter(function (m) { return m.poster_path; });
     row.replaceChildren();
     if (items.length === 0) { row.textContent = "No shows found for this genre."; }
-    items.forEach(function (m) { row.appendChild(makeCard(m)); });
+    items.forEach(function (m) { row.appendChild(makeCard(m)); });   // clicking a poster opens its pop-up
     row.scrollLeft = 0;
   } catch (error) {
     row.textContent = "Could not load shows. Check your internet connection.";
@@ -991,6 +1135,8 @@ document.querySelectorAll(".genres div").forEach(function (card) {
   };
 });
 
+
+/* ============ 16. RICHER POP-UP: CAST, TRAILER, WHERE TO WATCH, SIMILAR ============ */
 function addFact(box, label, text) {
   if (!text) { return; }
   var p = document.createElement("p");
@@ -1004,7 +1150,7 @@ function addFact(box, label, text) {
 async function loadDetails(m) {
   var extra = document.getElementById("mExtra");
   var similar = document.getElementById("mSimilar");
-  extra.textContent = "Loading details...";
+  extra.replaceChildren(spinner());
   similar.replaceChildren();
   try {
     var url = TMDB_URL + "/" + m.media_type + "/" + m.id +
@@ -1012,7 +1158,8 @@ async function loadDetails(m) {
     var response = await fetch(url);
     if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
     var d = await response.json();
-    if (!current || current.id !== m.id) { return; }
+    if (!current || current.id !== m.id) { return; }          // a different pop-up is open now
+    if (!m.overview && d.overview) { m.overview = d.overview; document.getElementById("mOverview").textContent = d.overview; }
     extra.replaceChildren();
 
     var minutes = d.runtime ? d.runtime + " min" : (d.episode_run_time && d.episode_run_time[0] ? d.episode_run_time[0] + " min per episode" : "");
@@ -1021,7 +1168,7 @@ async function loadDetails(m) {
     addFact(extra, "Cast", ((d.credits || {}).cast || []).slice(0, 6).map(function (c) { return c.name; }).join(", "));
 
     var regions = (d["watch/providers"] || {}).results || {};
-    var region = regions.PH || regions.US;
+    var region = regions.PH || regions.US;                    // Philippines first, then USA
     var where = region && region.flatrate ? region.flatrate.map(function (p) { return p.provider_name; }).join(", ") : "";
     addFact(extra, "Where to watch", where || "not listed for your region");
 
@@ -1038,7 +1185,7 @@ async function loadDetails(m) {
 
     ((d.similar || {}).results || []).filter(function (x) { return x.poster_path; }).slice(0, 10).forEach(function (x) {
       x.media_type = m.media_type;
-      similar.appendChild(makeCard(x));
+      similar.appendChild(makeCard(x));                       // click one to open it
     });
     updateAllArrows();
   } catch (error) {
@@ -1047,6 +1194,7 @@ async function loadDetails(m) {
   }
 }
 
+/* ============ 17. HOVER QUICK ACTIONS (♥ ✓ +) ============ */
 document.addEventListener("click", function (e) {
   var button = e.target.closest(".quick button");
   if (!button) { return; }
@@ -1065,6 +1213,7 @@ document.addEventListener("click", function (e) {
   }
 });
 
+/* ============ 18. DELETE REVIEWS, CUSTOM LISTS, EDIT PROFILE ============ */
 function ensureReviewIds() {
   var reviews = getList("filmlify_reviews"), fixed = false;
   reviews.forEach(function (r, i) { if (!r.id) { r.id = Date.now() + i; fixed = true; } });
@@ -1139,6 +1288,7 @@ document.getElementById("mListAdd").onclick = function () {
   showMessage("Added to " + list.name + "!");
 };
 
+// Edit Profile (simple pop-up questions; your answers are saved in this browser)
 var me = currentUser();
 var profileInfo = {
   name: me ? (me.displayName || me.username) : "Guest",
@@ -1168,6 +1318,7 @@ document.getElementById("editProfile").onclick = function () {
 paintProfileInfo();
 renderProfile();
 
+/* ============ 19. BROWSE PAGE WITH FILTERS ============ */
 var MOVIE_GENRES = [[28, "Action"], [12, "Adventure"], [16, "Animation"], [35, "Comedy"], [80, "Crime"], [99, "Documentary"], [18, "Drama"], [14, "Fantasy"], [27, "Horror"], [9648, "Mystery"], [10749, "Romance"], [878, "Sci-Fi"], [53, "Thriller"]];
 var TV_GENRES_LIST = [[10759, "Action & Adventure"], [16, "Animation"], [35, "Comedy"], [80, "Crime"], [99, "Documentary"], [18, "Drama"], [9648, "Mystery"], [10765, "Sci-Fi & Fantasy"]];
 var browsePage = 1;
@@ -1183,7 +1334,7 @@ fYear.appendChild(new Option("Any year", ""));
 for (var year = 2026; year >= 1970; year--) { fYear.appendChild(new Option(year, year)); }
 
 async function runBrowse(more) {
-  if (more) { browsePage++; } else { browsePage = 1; browseGrid.textContent = "Loading..."; }
+  if (more) { browsePage++; } else { browsePage = 1; browseGrid.replaceChildren(spinner()); }
   var type = fType.value;
   var sort = fSort.value;
   if (type === "tv" && sort === "primary_release_date.desc") { sort = "first_air_date.desc"; }
@@ -1211,16 +1362,21 @@ loadMore.onclick = function () { runBrowse(true); };
 fillGenreFilter();
 runBrowse(false);
 
+/* ============ 20. PHONE MENU BUTTON ============ */
 document.getElementById("menuBtn").onclick = function () { document.getElementById("mainNav").classList.toggle("open"); };
 window.addEventListener("hashchange", function () { document.getElementById("mainNav").classList.remove("open"); });
 
-var returnTo;
+
+/* ============ 21. LOGIN SYSTEM (accounts are stored in THIS browser only) ============ */
+// This is a demo login: accounts live in your browser, not on a server.
+// For real security (other devices, password reset...) you need a backend such as Firebase or Supabase.
+var returnTo;     // the page to go back to after logging in
 
 function accounts() {
   try { return JSON.parse(localStorage.getItem("filmlify_accounts")) || []; } catch (e) { return []; }
 }
 function currentUser() {
-  if (CLOUD) {
+  if (CLOUD) {                                     // real accounts: the session comes from Supabase
     var cs = cloudSession();
     return cs ? { username: cs.username, id: cs.user_id, displayName: cs.displayName || cs.username, handle: "@" + cs.username, bio: cs.bio || "Film lover" } : null;
   }
@@ -1230,18 +1386,19 @@ function currentUser() {
     return accounts().find(function (a) { return a.username === name; }) || null;
   } catch (e) { return null; }
 }
-function userKey(name) {
+function userKey(name) {                         // "filmlify_reviews" -> "filmlify_reviews:brian"
   var u = currentUser();
   return u ? name + ":" + u.username : null;
 }
 
+// Scrambles the password so it is not saved as plain text
 async function hashPassword(password, salt) {
   var text = salt + ":" + password;
   if (window.crypto && crypto.subtle) {
     var buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
     return Array.from(new Uint8Array(buffer)).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
   }
-  var h = 0;
+  var h = 0;                                      // simple backup for old browsers (weaker)
   for (var i = 0; i < text.length; i++) { h = (h * 31 + text.charCodeAt(i)) | 0; }
   return "basic" + h;
 }
@@ -1250,7 +1407,7 @@ function finishLogin(username, message) {
   localStorage.setItem("filmlify_session", username);
   sessionStorage.setItem("flash", message);
   sessionStorage.setItem("goto", returnTo || "#home");
-  location.reload();
+  location.reload();                              // reloads so every page shows this user's data
 }
 function logout() {
   localStorage.removeItem("filmlify_cloud");
@@ -1260,6 +1417,7 @@ function logout() {
   location.reload();
 }
 
+// Call this before any action that needs an account. Returns true if the user is logged in.
 function requireLogin(what) {
   if (currentUser()) { return true; }
   returnTo = location.hash || "#home";
@@ -1269,10 +1427,11 @@ function requireLogin(what) {
   return false;
 }
 
+// Show the person's name and a Log out link in the header
 function paintUserArea() {
   var area = document.getElementById("userArea");
   var u = currentUser();
-  if (!u) { return; }
+  if (!u) { return; }                             // the "Login / Sign up" link is already there
   area.replaceChildren();
   var name = document.createElement("a");
   name.className = "login-link";
@@ -1289,15 +1448,20 @@ function paintUserArea() {
 }
 paintUserArea();
 
+// Writing in the review box also needs a login
 document.getElementById("reviewText").onfocus = function () {
   if (!currentUser()) { this.blur(); requireLogin("write a review"); }
 };
 
+// Message left over from logging in/out
 try {
   var flash = sessionStorage.getItem("flash");
   if (flash) { sessionStorage.removeItem("flash"); showMessage(flash); }
 } catch (e) {}
 
+
+/* ============ 22. FAVORITES (EACH USER PICKS THEIR OWN) AND LOGIN-PAGE POSTERS ============ */
+// Keep only what we need to show a movie again later
 function slim(m) {
   return { id: m.id, media_type: m.media_type, title: m.title, name: m.name, poster_path: m.poster_path,
            overview: m.overview, vote_average: m.vote_average, release_date: m.release_date,
@@ -1308,9 +1472,9 @@ function fillFavorites(rowId, type) {
   var row = document.getElementById(rowId);
   row.replaceChildren();
   var favs = getList("filmlify_favorites").filter(function (f) { return f.media_type === type && f.poster_path; }).slice(0, 5);
-  favs.forEach(function (m) { row.appendChild(makeCard(m)); });
+  favs.forEach(function (m) { row.appendChild(makeCard(m)); });          // click one to open it
 
-  for (var i = favs.length; i < 5; i++) {
+  for (var i = favs.length; i < 5; i++) {                                // empty "+" slots
     var slot = document.createElement("div");
     slot.className = "slot";
     var box = document.createElement("div");
@@ -1335,6 +1499,7 @@ function paintFavoriteButton() {
   var key = current.media_type + "-" + current.id;
   var yes = getList("filmlify_favorites").some(function (f) { return f.media_type + "-" + f.id === key; });
   document.getElementById("mFavorite").textContent = yes ? "♥ In Favorites (click to remove)" : "♡ Add to Favorites";
+  document.getElementById("mFavorite").classList.toggle("is-on", yes);
 }
 
 document.getElementById("mFavorite").onclick = function () {
@@ -1360,6 +1525,7 @@ document.getElementById("mFavorite").onclick = function () {
 };
 renderProfile();
 
+// Login page: fill the left side with real movie posters (trending this week)
 async function loadBrandPosters() {
   var box = document.getElementById("brandPosters");
   try {
@@ -1372,15 +1538,20 @@ async function loadBrandPosters() {
       box.appendChild(tile);
     });
   } catch (error) {
-    console.error("Could not load login-page posters:", error);
+    console.error("Could not load login-page posters:", error);     // the colored background stays
   }
 }
 loadBrandPosters();
 
+
+/* ============ 23. READY-MADE DEMO ACCOUNT ============ */
+// Log in with   username: victor123   password: victor456
+// To change it, edit the words below. (Anyone who reads this file can see the password,
+// so use it only as a demo and never reuse a real password.)
 async function seedDemoAccount() {
-  if (CLOUD) { return; }
+  if (CLOUD) { return; }                          // real accounts: no built-in demo user
   try {
-    if (accounts().some(function (a) { return a.username === "victor123"; })) { return; }
+    if (accounts().some(function (a) { return a.username === "victor123"; })) { return; }   // already created
 
     var salt = Math.random().toString(36).slice(2);
     var list = accounts();
@@ -1395,6 +1566,7 @@ async function seedDemoAccount() {
     });
     localStorage.setItem("filmlify_accounts", JSON.stringify(list));
 
+    // Starting data for this account. The numbers are TMDB ids; posters are fetched automatically.
     var films = [[510, "One Flew Over the Cuckoo's Nest"], [278, "The Shawshank Redemption"], [77, "Memento"], [274, "The Silence of the Lambs"]];
     var shows = [[1396, "Breaking Bad"], [60059, "Better Call Saul"], [1398, "The Sopranos"]];
     var favorites = [], watched = [];
@@ -1421,6 +1593,7 @@ async function seedDemoAccount() {
 }
 seedDemoAccount();
 
+// Favorites that only have an id get their poster and details from TMDB
 async function fillMissingFavorites() {
   var favs = getList("filmlify_favorites");
   var changed = false;
@@ -1444,14 +1617,17 @@ async function fillMissingFavorites() {
 }
 fillMissingFavorites();
 
+
+/* ============ 24. ONLINE DATABASE (SUPABASE): ACCOUNTS, FOLLOWING, SHARED REVIEWS ============ */
 var cloudCounts = { followers: 0, following: 0 };
-var myFollowing = [];
-var myFollowers = [];
+var myFollowing = [];      // ids of the people I follow
+var myFollowers = [];      // ids of the people who follow me
 
 function cloudSession() {
   try { return JSON.parse(localStorage.getItem("filmlify_cloud")); } catch (e) { return null; }
 }
 
+// Asks Supabase for a fresh login token when the old one is about to expire
 async function refreshSession(session) {
   try {
     var r = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
@@ -1468,11 +1644,12 @@ async function refreshSession(session) {
   } catch (e) { return null; }
 }
 
+// Talks to the database tables.   db("follows?follower=eq.123", "GET")
 async function db(path, method, body, extraHeaders) {
   var session = cloudSession();
   if (session && Date.now() / 1000 > session.expires_at - 30) { session = (await refreshSession(session)) || session; }
   var headers = { apikey: SUPABASE_KEY, "Content-Type": "application/json" };
-  if (session) { headers.Authorization = "Bearer " + session.access_token; }
+  if (session) { headers.Authorization = "Bearer " + session.access_token; }     // only logged-in users send this
   if (extraHeaders) { Object.assign(headers, extraHeaders); }
   var response = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method: method || "GET", headers: headers, body: body ? JSON.stringify(body) : undefined });
   if (!response.ok) { throw new Error("Database error " + response.status + ": " + await response.text()); }
@@ -1491,6 +1668,7 @@ async function authCall(path, body) {
   } catch (e) { return { error: true, message: "Could not reach the database. Check your internet." }; }
 }
 
+// Sign up / sign in with the online database. Returns "" on success, or an error message.
 async function cloudAuth(isSignUp, user, email, pass) {
   try {
     var data;
@@ -1524,10 +1702,11 @@ async function cloudAuth(isSignUp, user, email, pass) {
   }
 }
 
+// Reviews and profile edits are copied to the database so followers can see them
 function cloudSaveReview(r) {
   var u = currentUser();
   if (!CLOUD || !u || !r) { return; }
-  db("reviews", "POST", { user_id: u.id, local_id: r.id, tmdb_key: r.key, title: r.title, poster: r.poster || "", stars: r.stars, body: r.text || "" }, { Prefer: "return=minimal" })
+  db("reviews?on_conflict=user_id,tmdb_key", "POST", { user_id: u.id, local_id: r.id, tmdb_key: r.key, title: r.title, poster: r.poster || "", stars: r.stars, body: r.text || "" }, { Prefer: "resolution=merge-duplicates,return=minimal" })
     .then(loadFriendFeed).catch(function (e) { console.error("Could not share review:", e); });
 }
 function cloudDeleteReview(localId) {
@@ -1541,6 +1720,7 @@ function cloudUpdateProfile(info) {
   db("profiles?id=eq." + u.id, "PATCH", { display_name: info.name, bio: info.bio }, { Prefer: "return=minimal" }).catch(function (e) { console.error(e); });
 }
 
+// Who I follow / who follows me
 async function refreshFollowing() {
   var u = currentUser();
   if (!CLOUD || !u) { return; }
@@ -1565,11 +1745,12 @@ async function toggleFollowUser(id, username) {
       await db("follows", "POST", { follower: u.id, following: id }, { Prefer: "return=minimal" });
       showMessage("You are now following @" + username + "!");
     }
-  } catch (e) { console.error(e); showMessage("Could not update. Please try again."); return; }
+  } catch (e) { console.error(e); showMessage("Could not update. Please try again.", "error"); return; }
   await loadPeople();
   loadFriendFeed();
 }
 
+// One row in a list of people
 function personRow(p) {
   var row = document.createElement("div");
   row.className = "item";
@@ -1625,6 +1806,7 @@ async function loadPeople() {
   } catch (e) { console.error(e); }
 }
 
+// Friend Activity: newest reviews from the people I follow
 async function loadFriendFeed() {
   var box = document.getElementById("friendFeed");
   if (!CLOUD || !currentUser()) { return; }
@@ -1675,3 +1857,486 @@ if (CLOUD) {
   document.getElementById("user").placeholder = "Enter your email";
   refreshFollowing().then(loadFriendFeed);
 }
+
+
+/* ============ 25. LOADING / EMPTY STATES, WATCHLIST + WATCHED SECTIONS, DATABASE SYNC ============ */
+function spinner() {
+  var s = document.createElement("div");
+  s.className = "spinner";
+  s.setAttribute("role", "status");
+  s.setAttribute("aria-label", "Loading");
+  return s;
+}
+
+function emptyState(icon, title, text, linkText, linkHref) {
+  var box = document.createElement("div");
+  box.className = "empty empty-wide";
+  var i = document.createElement("div");
+  i.className = "empty-icon";
+  i.textContent = icon;
+  var t = document.createElement("p");
+  var b = document.createElement("b");
+  b.textContent = title;
+  t.appendChild(b);
+  var d = document.createElement("p");
+  var sm = document.createElement("small");
+  sm.textContent = text;
+  d.appendChild(sm);
+  var link = document.createElement("a");
+  link.className = "btn";
+  link.href = linkHref || "#browse";
+  link.textContent = linkText || "Browse movies";
+  box.appendChild(i); box.appendChild(t); box.appendChild(d); box.appendChild(link);
+  return box;
+}
+
+// One row of poster cards (used for Watchlist and Watched on the Profile)
+function fillCardGrid(rowId, countId, listName, icon, title, text, removeFn) {
+  var row = document.getElementById(rowId);
+  var list = getList(listName);
+  row.replaceChildren();
+  document.getElementById(countId).textContent = list.length ? "(" + list.length + ")" : "";
+  if (list.length === 0) { row.appendChild(emptyState(icon, title, text)); }
+  list.forEach(function (m) {
+    var parts = (m.key || "").split("-");                       // older saves only have a key like "movie-550"
+    m.media_type = m.media_type || parts[0];
+    m.id = m.id || Number(parts[1]);
+    var card = makeCard(m);
+    var poster = card.querySelector(".poster");
+    if (!m.poster_path) { poster.style.backgroundImage = ""; poster.classList.remove("has-image"); }
+    var remove = document.createElement("button");
+    remove.className = "btn small outline remove-btn";
+    remove.textContent = "Remove";
+    remove.onclick = function (e) { e.stopPropagation(); removeFn(m); };
+    card.appendChild(remove);
+    row.appendChild(card);
+  });
+  if (row.updateArrows) { row.updateArrows(); }
+}
+function renderCollections() {
+  fillCardGrid("watchlistRow", "wlCount", "filmlify_watchlist", "🎬", "Your watchlist is empty",
+               "Hover a poster and tap +, or open a movie and press Add to Watchlist.", toggleWatchlist);
+  fillCardGrid("watchedRow", "wdCount", "filmlify_watched", "✓", "Nothing marked as watched yet",
+               "Mark movies you have seen. Reviewing a movie counts too.", toggleWatched);
+}
+
+// Old saved entries that only have an id get their poster and details from TMDB
+async function fillMissingItems(listName) {
+  var list = getList(listName), changed = false;
+  for (var i = 0; i < list.length; i++) {
+    var f = list[i];
+    if (f.poster_path !== undefined) { continue; }
+    var parts = (f.key || "").split("-");
+    if (parts.length < 2) { continue; }
+    try {
+      var response = await fetch(TMDB_URL + "/" + parts[0] + "/" + parts[1] + "?api_key=" + TMDB_KEY);
+      if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
+      var d = await response.json();
+      f.media_type = parts[0]; f.id = Number(parts[1]);
+      f.poster_path = d.poster_path || ""; f.title = d.title || d.name; f.name = d.name || d.title;
+      f.overview = d.overview; f.vote_average = d.vote_average;
+      f.release_date = d.release_date; f.first_air_date = d.first_air_date;
+      f.genre_ids = (d.genres || []).map(function (g) { return g.id; });
+      changed = true;
+    } catch (error) { console.error("Could not load details for " + f.key + ":", error); }
+  }
+  if (changed) { saveList(listName, list); renderProfile(); }
+}
+
+// ----- Saving the Watchlist and Watched lists in the database -----
+function listRow(m) {
+  return { tmdb_key: m.media_type + "-" + m.id, media_type: m.media_type, tmdb_id: m.id,
+           title: nameOf(m), poster: m.poster_path || "", year: yearOf(m) };
+}
+function cloudListAdd(table, m) {
+  var u = currentUser();
+  if (!CLOUD || !u) { return; }
+  var row = listRow(m);
+  row.user_id = u.id;
+  db(table + "?on_conflict=user_id,tmdb_key", "POST", row, { Prefer: "resolution=ignore-duplicates,return=minimal" })
+    .catch(function (e) { console.error(e); showMessage("Could not save to the database.", "error"); });
+}
+function cloudListRemove(table, key) {
+  var u = currentUser();
+  if (!CLOUD || !u) { return; }
+  db(table + "?user_id=eq." + u.id + "&tmdb_key=eq." + encodeURIComponent(key), "DELETE")
+    .catch(function (e) { console.error(e); showMessage("Could not update the database.", "error"); });
+}
+function fromRow(r) {
+  return { key: r.tmdb_key, id: r.tmdb_id, media_type: r.media_type, title: r.title, name: r.title,
+           poster_path: r.poster || "", release_date: r.year || "", first_air_date: r.year || "" };
+}
+
+// When you log in, your saved lists come from the database (so they follow you to any device)
+async function syncFromCloud() {
+  var u = currentUser();
+  if (!CLOUD || !u) { return; }
+  try {
+    var wl = await db("watchlist?user_id=eq." + u.id + "&select=*&order=created_at.desc");
+    var wd = await db("watched?user_id=eq." + u.id + "&select=*&order=created_at.desc");
+    var rv = await db("reviews?user_id=eq." + u.id + "&select=*&order=created_at.asc");
+    var old = getList("filmlify_reviews");
+    saveList("filmlify_watchlist", wl.map(fromRow));
+    saveList("filmlify_watched", wd.map(fromRow));
+    saveList("filmlify_reviews", rv.map(function (r) {
+      var o = old.find(function (x) { return x.key === r.tmdb_key; }) || {};
+      return { id: r.local_id || r.id, key: r.tmdb_key, title: r.title, poster: r.poster || "", genres: o.genres,
+               stars: r.stars, text: r.body || "",
+               date: new Date(r.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) };
+    }));
+    renderProfile();
+  } catch (e) {
+    console.error("Could not load your saved data:", e);
+    showMessage("Could not load your saved data. Check your connection.", "error");
+  }
+}
+
+// Everybody's reviews of the open movie (online mode), with usernames, stars and dates
+async function paintCommunityReviews() {
+  var box = document.getElementById("mReviews");
+  var openKey = current.media_type + "-" + current.id;
+  box.replaceChildren(spinner());
+  try {
+    var rows = await db("reviews?tmdb_key=eq." + encodeURIComponent(openKey) + "&select=*,profiles(username)&order=created_at.desc&limit=20");
+    if (!current || current.media_type + "-" + current.id !== openKey) { return; }
+    box.replaceChildren();
+    if (rows.length === 0) { box.textContent = "No reviews yet. Be the first!"; return; }
+    var me = currentUser();
+    rows.forEach(function (r) {
+      var row = document.createElement("div");
+      row.className = "item";
+      var text = document.createElement("span");
+      var who = document.createElement("b");
+      who.textContent = "@" + (r.profiles ? r.profiles.username : "someone") + " ";
+      var stars = document.createElement("span");
+      stars.className = "star";
+      stars.textContent = starText(r.stars);
+      text.appendChild(who);
+      text.appendChild(stars);
+      if (r.body) { text.appendChild(document.createElement("br")); text.appendChild(document.createTextNode(r.body)); }
+      var date = document.createElement("small");
+      date.textContent = new Date(r.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+      text.appendChild(document.createElement("br"));
+      text.appendChild(date);
+      row.appendChild(text);
+      if (me && r.user_id === me.id) {                              // you can delete your own review
+        var del = document.createElement("button");
+        del.className = "btn small";
+        del.textContent = "✕";
+        del.title = "Delete your review";
+        del.onclick = function () {
+          if (!confirm("Delete your review?")) { return; }
+          saveList("filmlify_reviews", getList("filmlify_reviews").filter(function (x) { return x.key !== openKey; }));
+          cloudDeleteReview(r.local_id);
+          renderProfile();
+          row.remove();
+          showMessage("Review deleted.");
+        };
+        row.appendChild(del);
+      }
+      box.appendChild(row);
+    });
+  } catch (e) {
+    console.error("Could not load reviews:", e);
+    box.textContent = "Could not load reviews right now.";
+  }
+}
+
+if (CLOUD && currentUser()) {
+  syncFromCloud().then(function () {
+    fillMissingItems("filmlify_watchlist");
+    fillMissingItems("filmlify_watched");
+    fillMissingReviewData();
+  });
+} else {
+  fillMissingItems("filmlify_watchlist");
+  fillMissingItems("filmlify_watched");
+}
+renderProfile();
+
+
+/* ============ 26. BOOKING PANEL, PAYMENT, TICKETS AND MY BOOKINGS ============ */
+var OMDB_KEY = "";      // optional: a free key from omdbapi.com shows IMDb ratings (empty = TMDB ratings)
+var BOOKED_KEY = "filmlify_booked";      // browser-only mode: seats taken (shared by every account on this browser)
+var myBookingsList = [];
+function el(id) { return document.getElementById(id); }
+
+// "Book Now" under each Now Showing poster picks the movie for the booking panel
+function addBookNowButtons() {
+  document.querySelectorAll('#theater .row[data-source="/movie/now_playing"] .card').forEach(function (card) {
+    if (card.querySelector(".book-btn")) { return; }
+    var book = document.createElement("button");
+    book.className = "btn wide book-btn";
+    book.textContent = "Book Now";
+    book.onclick = async function (e) {
+      e.stopPropagation();
+      var m = known[card.dataset.key];
+      if (!m) {                                            // a poster typed by hand: look it up first
+        m = await searchTMDB(card.querySelector("b").textContent);
+        if (!m) { showMessage("Sorry, could not load this movie.", "error"); return; }
+        remember(m);
+      }
+      showBookingMovie(m);
+    };
+    card.appendChild(book);
+  });
+}
+
+// Optional IMDb rating (needs OMDB_KEY)
+async function getImdbRating(m) {
+  if (!OMDB_KEY) { return null; }
+  var cacheKey = "imdb:" + m.id;
+  try {
+    var saved = localStorage.getItem(cacheKey);
+    if (saved) { return saved; }
+    var ids = await (await fetch(TMDB_URL + "/movie/" + m.id + "/external_ids?api_key=" + TMDB_KEY)).json();
+    if (!ids.imdb_id) { return null; }
+    var out = await (await fetch("https://www.omdbapi.com/?i=" + ids.imdb_id + "&apikey=" + OMDB_KEY)).json();
+    var rating = out.imdbRating && out.imdbRating !== "N/A" ? out.imdbRating : null;
+    if (rating) { localStorage.setItem(cacheKey, rating); }
+    return rating;
+  } catch (e) { return null; }
+}
+
+// Show the chosen movie (poster, genres, rating, story) in the booking panel
+function showBookingMovie(m) {
+  el("bookTitle").textContent = nameOf(m);
+  el("bookPoster").style.backgroundImage = m.poster_path ? "url(" + POSTER_URL + m.poster_path + ")" : "";
+  var seen = {};
+  el("bookGenres").textContent = genreNames(m).filter(function (g) { return seen[g] ? false : (seen[g] = true); }).slice(0, 3).join(" • ");
+  var rating = el("bookRating");
+  rating.textContent = m.vote_average ? "★ " + m.vote_average.toFixed(1) : "";
+  getImdbRating(m).then(function (r) { if (r && el("bookTitle").textContent === nameOf(m)) { rating.textContent = "★ " + r + " IMDb"; } });
+  var story = m.overview || "";
+  if (story.length > 260) { story = story.slice(0, 257).replace(/\s+\S*$/, "") + "..."; }
+  el("bookOverview").textContent = story;
+  el("bookEmpty").hidden = true;
+  el("bookBody").hidden = false;
+  updateSummary();                                   // new movie: seats start empty and the summary updates
+  el("bookPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ----- Where bookings are kept: Supabase when connected, otherwise this browser ----- */
+function localBooked() {
+  try { return JSON.parse(localStorage.getItem(BOOKED_KEY)) || {}; } catch (e) { return {}; }
+}
+function rpcMessage(error) {                         // turns a database error into a friendly sentence
+  try { return JSON.parse(String(error.message).replace(/^Database error \d+: /, "")).message || "Something went wrong."; }
+  catch (e) { return "Could not complete that. Please check your connection and try again."; }
+}
+async function fetchTakenSeats(key) {
+  if (CLOUD) {
+    try { return (await db("booked_seats?show_key=eq." + encodeURIComponent(key) + "&select=seat")).map(function (r) { return r.seat; }); }
+    catch (e) { console.error("Could not load taken seats:", e); return null; }
+  }
+  return localBooked()[key] || [];
+}
+async function loadBookedSeats() {
+  if (!el("bookTitle").textContent) { return; }      // no movie chosen yet
+  var key = bookingKey();
+  var seats = await fetchTakenSeats(key);
+  if (seats && key === bookingKey()) {
+    bookedSeats = seats;
+    chosen = chosen.filter(function (s) { return seats.indexOf(s) < 0; });
+    paintSeats();
+    updateSummary();
+  }
+}
+function bookingProblem(p) {                         // the same checks the database function makes
+  if (!p.seats.length || p.seats.length > 10 || p.seats.some(function (s) { return !/^[A-H]([1-9]|1[0-5])$/.test(s); }) || new Set(p.seats).size !== p.seats.length) { return "Please choose between 1 and 10 valid seats."; }
+  if (["GCash", "Maya", "Card"].indexOf(p.method) < 0) { return "Unknown payment method."; }
+  if (!p.movie || p.movie.length > 120 || !/^Filmlify - [\w .'-]{1,40}$/.test(p.cinema) || !/^\d{1,2}:\d\d (AM|PM)$/.test(p.time) || !/^\d{4}-\d\d-\d\d$/.test(p.date)) { return "Invalid showtime."; }
+  if (showHasStarted(p.date, p.time)) { return "That showtime has already started."; }
+  return "";
+}
+async function createBooking(p) {                    // returns { booking } or { error }
+  if (CLOUD) {
+    try {
+      var b = await db("rpc/book_seats", "POST", { p_movie: p.movie, p_cinema: p.cinema, p_date: p.date, p_time: p.time, p_seats: p.seats, p_method: p.method });
+      return { booking: b };
+    } catch (e) { console.warn("Booking was not saved:", e.message); return { error: rpcMessage(e) }; }
+  }
+  var problem = bookingProblem(p);
+  if (problem) { return { error: problem }; }
+  var taken = localBooked(), already = taken[p.key] || [];
+  if (p.seats.some(function (s) { return already.indexOf(s) >= 0; })) { return { error: "Sorry, one of those seats was just taken." }; }
+  taken[p.key] = already.concat(p.seats);
+  localStorage.setItem(BOOKED_KEY, JSON.stringify(taken));
+  var booking = { ref: "FLM-" + Math.random().toString(16).slice(2, 8).toUpperCase(), key: p.key, movie: p.movie, cinema: p.cinema,
+                  date: p.date, time: p.time, method: p.method, total: p.seats.length * TICKET_PRICE, seats: p.seats.slice() };
+  var list = getList("filmlify_bookings");
+  list.unshift(booking);
+  saveList("filmlify_bookings", list);
+  return { booking: booking };
+}
+async function cancelBooking(b) {                    // returns {} or { error }
+  if (CLOUD) {
+    try { await db("rpc/cancel_booking", "POST", { p_ref: b.ref }); return {}; }
+    catch (e) { return { error: rpcMessage(e) }; }
+  }
+  if (showHasStarted(b.date, b.time)) { return { error: "That showtime has already started, so it can no longer be cancelled." }; }
+  saveList("filmlify_bookings", getList("filmlify_bookings").filter(function (x) { return x.ref !== b.ref; }));
+  var taken = localBooked();
+  taken[b.key] = (taken[b.key] || []).filter(function (s) { return b.seats.indexOf(s) < 0; });
+  localStorage.setItem(BOOKED_KEY, JSON.stringify(taken));
+  return {};
+}
+async function loadMyBookings() {
+  var u = currentUser();
+  if (!u) { myBookingsList = []; renderBookings(); return; }
+  if (CLOUD) {
+    try {
+      var rows = await db("bookings?select=*,booked_seats(seat)&order=paid_at.desc");
+      myBookingsList = rows.map(function (r) {
+        return { ref: r.ref, key: r.show_key, movie: r.movie, cinema: r.cinema, date: r.show_date, time: r.show_time, method: r.method,
+                 total: r.total, seats: (r.booked_seats || []).map(function (x) { return x.seat; }).sort() };
+      });
+    } catch (e) { console.error("Could not load bookings:", e); showMessage("Could not load your bookings.", "error"); }
+  } else { myBookingsList = getList("filmlify_bookings"); }
+  renderBookings();
+}
+
+/* ----- Payment pop-up ----- */
+var payModal = el("payModal");
+var payLabel = "Pay now";          // the Pay button shows the total, like "Pay ₱ 340.00"
+function addPayRow(box, label, value, extraClass) {            // one line of the receipt
+  var row = document.createElement("div");
+  row.className = "pay-row" + (extraClass ? " " + extraClass : "");
+  var name = document.createElement("span"); name.textContent = label;
+  var text = document.createElement("b"); text.textContent = value;
+  row.appendChild(name); row.appendChild(text); box.appendChild(row);
+}
+el("payBtn").onclick = function () {
+  if (!requireLogin("book tickets")) { return; }
+  if (chosen.length === 0) { showMessage("Please select at least one seat.", "error"); return; }
+  refreshTimes(); updateSummary();
+  if (el("date").value < todayISO()) { showMessage("That date has passed. Please pick today or a later date.", "error"); return; }
+  var receipt = el("paySummary");
+  receipt.replaceChildren();
+  addPayRow(receipt, "Movie", el("bookTitle").textContent);
+  addPayRow(receipt, "Cinema", el("cinema").value);
+  addPayRow(receipt, "Date & time", el("date").value + " • " + document.querySelector("#times .chosen").textContent);
+  addPayRow(receipt, "Seats", chosen.join(", ") + " (" + chosen.length + ")");
+  addPayRow(receipt, "Total", el("sumTotal").textContent, "pay-total");
+  payLabel = "Pay " + el("sumTotal").textContent;
+  el("confirmPay").textContent = payLabel;
+  el("payError").textContent = "";
+  el("payStep1").style.display = "block"; el("payStep2").style.display = "none";
+  payModal.classList.add("open");
+};
+el("cancelPay").onclick = function () { payModal.classList.remove("open"); };
+el("payMethod").onchange = function () {
+  var card = this.value === "Card";
+  document.querySelectorAll("#payMethods .pay-method").forEach(function (tile) {      // highlight the matching tile
+    var picked = tile.dataset.method === el("payMethod").value;
+    tile.classList.toggle("on", picked);
+    tile.setAttribute("aria-checked", picked ? "true" : "false");
+  });
+  if (!card) { el("walletLabel").textContent = this.value + " mobile number"; }
+  el("cardBox").style.display = card ? "block" : "none";
+  el("walletBox").style.display = card ? "none" : "block";
+};
+el("payMethods").addEventListener("click", function (e) {                              // click a tile to pick it
+  var tile = e.target.closest(".pay-method");
+  if (!tile) { return; }
+  el("payMethod").value = tile.dataset.method;
+  el("payMethod").dispatchEvent(new Event("change"));
+  el("payError").textContent = "";
+});
+el("cardNum").oninput = function () { this.value = this.value.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim(); };
+el("cardExp").oninput = function () { var d = this.value.replace(/\D/g, "").slice(0, 4); this.value = d.length > 2 ? d.slice(0, 2) + "/" + d.slice(2) : d; };
+
+function luhn(num) {                                  // checks that a card number is possible
+  var sum = 0, flip = false;
+  for (var i = num.length - 1; i >= 0; i--) {
+    var d = parseInt(num[i], 10); if (flip) { d *= 2; if (d > 9) { d -= 9; } } sum += d; flip = !flip;
+  }
+  return num.length >= 13 && sum % 10 === 0;
+}
+function payProblem() {
+  var method = el("payMethod").value;
+  if (method !== "Card") { return /^09\d{9}$/.test(el("payMobile").value) ? "" : "Enter a valid mobile number (09XXXXXXXXX)."; }
+  var num = el("cardNum").value.replace(/\s/g, ""), exp = el("cardExp").value.match(/^(\d\d)\/(\d\d)$/);
+  if (!el("cardName").value.trim()) { return "Enter the name on the card."; }
+  if (!luhn(num)) { return "That card number is not valid."; }
+  if (!exp || +exp[1] < 1 || +exp[1] > 12) { return "Enter the expiry as MM/YY."; }
+  var now = new Date();
+  if (2000 + +exp[2] < now.getFullYear() || (2000 + +exp[2] === now.getFullYear() && +exp[1] < now.getMonth() + 1)) { return "That card has expired."; }
+  if (!/^\d{3,4}$/.test(el("cardCvv").value)) { return "Enter the 3 or 4 digit CVV."; }
+  return "";
+}
+el("confirmPay").onclick = async function () {
+  var problem = payProblem();
+  el("payError").textContent = problem;
+  if (problem) { return; }
+  var btn = this; btn.disabled = true; btn.textContent = "Processing...";
+  await new Promise(function (r) { setTimeout(r, 1200); });          // pretend the payment provider is working
+  // Only the booking is saved. Card and phone details never leave this page.
+  var result = await createBooking({
+    key: bookingKey(), movie: el("bookTitle").textContent, cinema: el("cinema").value, date: el("date").value,
+    time: document.querySelector("#times .chosen").textContent, seats: chosen.slice(), method: el("payMethod").value
+  });
+  btn.disabled = false; btn.textContent = payLabel;
+  if (result.error) { el("payError").textContent = result.error; loadBookedSeats(); return; }
+  var booking = result.booking;
+  chosen = []; updateSummary(); await loadBookedSeats(); await loadMyBookings();
+  ["payMobile", "cardName", "cardNum", "cardExp", "cardCvv"].forEach(function (id) { el(id).value = ""; });
+  el("ticketBox").replaceChildren();
+  [["Reference", booking.ref], ["Movie", booking.movie], ["Cinema", booking.cinema], ["Date & Time", booking.date + " • " + booking.time],
+   ["Seats", booking.seats.join(", ")], ["Paid with", booking.method], ["Total", "₱ " + Number(booking.total).toFixed(2)]].forEach(function (r) {
+    var p = document.createElement("p"), x = document.createElement("span"), y = document.createElement("span");
+    x.textContent = r[0]; y.textContent = r[1]; p.appendChild(x); p.appendChild(y); el("ticketBox").appendChild(p);
+  });
+  el("payStep1").style.display = "none"; el("payStep2").style.display = "block";
+};
+el("closeTicket").onclick = function () { payModal.classList.remove("open"); };
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape" && el("payStep1").style.display !== "none") { payModal.classList.remove("open"); }
+});
+
+/* ----- My Bookings (Profile page) ----- */
+function renderBookings() {
+  var box = el("myBookings");
+  box.replaceChildren();
+  el("bkCount").textContent = myBookingsList.length ? "(" + myBookingsList.length + ")" : "";
+  if (myBookingsList.length === 0) {
+    box.appendChild(emptyState("🎟", "No bookings yet", "Pick a movie in In Theater and choose your seats.", "Book tickets", "#theater"));
+    return;
+  }
+  myBookingsList.forEach(function (b) {
+    var row = document.createElement("div");
+    row.className = "item booking";
+    var text = document.createElement("span");
+    var title = document.createElement("b");
+    title.textContent = b.movie + "  •  " + b.ref;
+    var line1 = document.createElement("small");
+    line1.textContent = b.cinema + " • " + b.date + " " + b.time;
+    var line2 = document.createElement("small");
+    line2.textContent = "Seats " + b.seats.join(", ") + " • " + b.method + " • ₱ " + Number(b.total).toFixed(2);
+    text.appendChild(title);
+    text.appendChild(document.createElement("br")); text.appendChild(line1);
+    text.appendChild(document.createElement("br")); text.appendChild(line2);
+    row.appendChild(text);
+    if (showHasStarted(b.date, b.time)) {
+      var done = document.createElement("small"); done.textContent = "Showtime passed"; row.appendChild(done);
+    } else {
+      var cancel = document.createElement("button");
+      cancel.className = "btn small outline";
+      cancel.textContent = "Cancel booking";
+      cancel.onclick = async function () {
+        if (!confirm("Cancel booking " + b.ref + "?")) { return; }
+        var r = await cancelBooking(b);
+        if (r.error) { showMessage(r.error, "error"); return; }
+        await loadMyBookings(); loadBookedSeats();
+        showMessage("Booking cancelled.");
+      };
+      row.appendChild(cancel);
+    }
+    box.appendChild(row);
+  });
+}
+loadMyBookings();
+
+// Keep the seat map fresh while the Theater page is open (other people may book seats)
+setInterval(function () { if (location.hash === "#theater" && el("bookTitle").textContent) { loadBookedSeats(); } }, 15000);
+window.addEventListener("focus", function () { if (location.hash === "#theater" && el("bookTitle").textContent) { loadBookedSeats(); } });
