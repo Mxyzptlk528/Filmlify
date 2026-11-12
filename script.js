@@ -2535,3 +2535,32 @@ var backBtn = document.getElementById("backToPeople");
 if (backBtn) {
   backBtn.onclick = function () { location.hash = "#people"; };
 }
+
+/* ============ 28. HELP CENTER: SEARCH AND TOPIC SHORTCUTS ============ */
+(function () {
+  var box = document.getElementById("helpSearch");
+  if (!box) { return; }
+  box.addEventListener("input", function () {
+    var text = box.value.trim().toLowerCase(), shown = 0;
+    document.querySelectorAll("#helpBody .faq").forEach(function (item) {
+      var match = !text || item.textContent.toLowerCase().indexOf(text) >= 0;
+      item.hidden = !match;
+      if (match) { shown++; }
+      if (text && match) { item.open = true; } else if (!text) { item.open = false; }
+    });
+    document.querySelectorAll("#helpBody .faq-group").forEach(function (g) {
+      g.hidden = !g.querySelector(".faq:not([hidden])");
+    });
+    document.getElementById("helpEmpty").hidden = shown > 0;
+  });
+  document.getElementById("helpTopics").addEventListener("click", function (e) {
+    var link = e.target.closest("[data-jump]");
+    if (!link) { return; }
+    e.preventDefault();
+    box.value = ""; box.dispatchEvent(new Event("input"));
+    var target = Array.from(document.querySelectorAll("#helpBody .faq-group")).find(function (g) {
+      return g.querySelector("h3").textContent.indexOf(link.dataset.jump) >= 0;
+    });
+    if (target) { target.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  });
+})();

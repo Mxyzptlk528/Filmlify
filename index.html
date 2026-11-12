@@ -415,6 +415,50 @@
   </section>
 </div>
 
+<!-- ===================== HELP CENTER ===================== -->
+<div class="page" id="help">
+  <div class="hero help-hero">
+    <h1 style="color:var(--accent)">Help Center</h1>
+    <p style="font-size:20px">Quick answers about accounts, reviews, lists and tickets.</p>
+    <input type="search" id="helpSearch" placeholder="Search help topics..." autocomplete="off">
+  </div>
+  <div class="help-topics" id="helpTopics">
+    <a href="#help" data-jump="Getting started">🎬<b>Getting started</b></a>
+    <a href="#help" data-jump="Reviews, lists and favorites">⭐<b>Reviews &amp; lists</b></a>
+    <a href="#help" data-jump="Following people">👥<b>Following</b></a>
+    <a href="#help" data-jump="Booking tickets">🎟<b>Booking</b></a>
+    <a href="#help" data-jump="Privacy and data">🔒<b>Privacy</b></a>
+  </div>
+  <div class="help-body" id="helpBody">
+    <div class="faq-group"><h3>🎬 Getting started</h3>
+      <details class="faq"><summary>Do I need an account?</summary><p>You can browse movies, TV shows and trailers without one. An account is needed to review, like, follow people, keep a watchlist or lists, and book tickets.</p></details>
+      <details class="faq"><summary>How do I sign up or log in?</summary><p>Click <b>Login / Sign up</b> at the top right. To sign up, choose a username, enter your email and a password of at least 6 characters. If email confirmation is on, check your inbox first, then sign in.</p></details>
+      <details class="faq"><summary>I forgot my password. What can I do?</summary><p>Password reset is not available yet. If you cannot sign in, double-check the email you used and try again, or create a new account.</p></details>
+    </div>
+    <div class="faq-group"><h3>⭐ Reviews, lists and favorites</h3>
+      <details class="faq"><summary>How do I rate and review a movie?</summary><p>Click any poster to open it, pick 1 to 5 stars, optionally write a few words, then press <b>Done</b>. Reviewing also marks the title as watched.</p></details>
+      <details class="faq"><summary>How do I use the Watchlist and Watched lists?</summary><p>Hover a poster and tap <b>+</b> for Watchlist or <b>✓</b> for Watched, or use the buttons inside the movie pop-up. Everything shows on your Profile.</p></details>
+      <details class="faq"><summary>How do favorites work?</summary><p>Open a film or show and press <b>Add to Favorites</b>. You can keep up to 5 favorite films and 5 favorite shows.</p></details>
+      <details class="faq"><summary>Can I make my own lists?</summary><p>Yes. On your Profile, type a name under <b>Custom Lists</b> and press Create List, then add titles from the movie pop-up.</p></details>
+    </div>
+    <div class="faq-group"><h3>👥 Following people</h3>
+      <details class="faq"><summary>How do I find and follow friends?</summary><p>Open <b>People</b> in the menu and search by username. Click Follow, and their reviews will appear under Friend Activity on the Home page.</p></details>
+      <details class="faq"><summary>Can I see someone else's profile?</summary><p>Yes. Click a person's name in any list to see their favorites and recent reviews.</p></details>
+    </div>
+    <div class="faq-group"><h3>🎟 Booking tickets</h3>
+      <details class="faq"><summary>How do I book tickets?</summary><p>Go to <b>In Theater</b>, press Book Now under a movie, choose the cinema, date, time and seats, then press Proceed to Payment.</p></details>
+      <details class="faq"><summary>Is the payment real?</summary><p>No. Payment is a demo: no real money is charged and no card or phone details are saved.</p></details>
+      <details class="faq"><summary>Can I cancel a booking?</summary><p>Yes. Open your Profile, find the booking under <b>My Bookings</b> and press Cancel booking. Bookings cannot be cancelled once the showtime has started.</p></details>
+      <details class="faq"><summary>Why can't I pick some seats?</summary><p>Dark seats are already taken for that showtime. Choose a different seat, time or date.</p></details>
+    </div>
+    <div class="faq-group"><h3>🔒 Privacy and data</h3>
+      <details class="faq"><summary>Where does movie information come from?</summary><p>All movie and TV data comes from TMDB. Filmlify is not endorsed or certified by TMDB.</p></details>
+      <details class="faq"><summary>What do you store about me?</summary><p>Your account, reviews, lists and bookings. See the <a href="#privacy" style="color:var(--accent)">Privacy Policy</a> for details.</p></details>
+    </div>
+  </div>
+  <div class="empty" id="helpEmpty" hidden>No help topics match your search.</div>
+</div>
+
 <!-- ===================== TERMS AND PRIVACY (draft text: have it reviewed before launch) ===================== -->
 <div class="page" id="terms">
   <section class="block"><h2>Terms of Service</h2><div class="box">
@@ -475,7 +519,7 @@
   <div class="footer-inner">
     <div><div class="logo">🎞 Filmlify</div><p style="max-width:280px">Search top-rated blockbusters, trending releases, and hidden gems in seconds.</p></div>
     <div><b>Navigation</b><a href="#home">Home</a><a href="#movies">Movies</a><a href="#tv">TV Shows</a><a href="#theater">In Theater</a><a href="#profile">Profile</a></div>
-    <div><b>Support &amp; Legal</b><a href="#home">Help Center</a><a href="#terms">Terms of Service</a><a href="#privacy">Privacy Policy</a><a href="mailto:brianmanzano528@gmail.com">Contact Us</a></div>
+    <div><b>Support &amp; Legal</b><a href="#help">Help Center</a><a href="#terms">Terms of Service</a><a href="#privacy">Privacy Policy</a></div>
     <div><b>Contact With Us</b>
       <!-- EDIT YOUR CONTACT LINKS HERE -->
       <a href="https://www.facebook.com/brian.manzano.906/" target="_blank" rel="noopener">Facebook</a>
