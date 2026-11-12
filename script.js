@@ -216,61 +216,86 @@ document.getElementById("showPass").onchange = function () {
 };
 
 // switch between Sign In and Sign Up
-document.getElementById("switchLink").onclick = function (e) {
-  e.preventDefault();
-  signUpMode = !signUpMode;
+function paintAuthMode() {
   document.getElementById("formTitle").textContent = signUpMode ? "Create your account" : "Welcome to Filmlify";
   document.getElementById("submitBtn").textContent = signUpMode ? "Sign Up" : "Sign In";
   document.getElementById("emailBox").style.display = signUpMode ? "block" : "none";
-  document.querySelector('label[for="user"]').textContent = signUpMode ? "Username" : (CLOUD ? "Email" : "Email or Username");
+  document.getElementById("identLabel").textContent = signUpMode ? "Username" : (CLOUD ? "Email" : "Email or Username");
+  document.getElementById("loginIdentifier").placeholder = signUpMode ? "Choose a username (3-20 letters, numbers or _)" : (CLOUD ? "Enter your email" : "Enter your email or username");
+  document.getElementById("pass").autocomplete = signUpMode ? "new-password" : "current-password";
   document.getElementById("switchText").textContent = signUpMode ? "Already have an account?" : "Don't have an account?";
-  this.textContent = signUpMode ? "Sign In" : "Sign Up";
+  document.getElementById("switchLink").textContent = signUpMode ? "Sign In" : "Sign Up";
+  ["emailError", "userError", "passError"].forEach(function (id) { document.getElementById(id).textContent = ""; });
+}
+document.getElementById("switchLink").onclick = function (e) {
+  e.preventDefault();
+  signUpMode = !signUpMode;
+  paintAuthMode();
 };
+paintAuthMode();
 
-// check the form when the button is pressed
-// check the form when the button is pressed
-// check the form when the button is pressed
 // check the form when the button is pressed
 document.getElementById("loginForm").onsubmit = async function (e) {
   e.preventDefault();
-  
-  // Use the new ID we just created in the HTML
-  var userInput = document.getElementById("loginIdentifier") ? document.getElementById("loginIdentifier").value : "";
-  var emailInput = document.getElementById("email") ? document.getElementById("email").value : "";
-  var pass = document.getElementById("pass") ? document.getElementById("pass").value : "";
+  var ident = document.getElementById("loginIdentifier").value.trim();   // username (sign up) or email / username (sign in)
+  var email = document.getElementById("email").value.trim();
+  var pass = document.getElementById("pass").value;
+  var emailErr = document.getElementById("emailError"), userErr = document.getElementById("userError"), passErr = document.getElementById("passError");
+  emailErr.textContent = ""; userErr.textContent = ""; passErr.textContent = "";
 
-  // If signing up, they typed in both boxes. If signing in, they only used the loginIdentifier box.
-  var finalUser = signUpMode ? userInput : emailInput;
-  var finalEmail = signUpMode ? emailInput : userInput;
-  var finalPass = pass;
-
-  var errors = { user: "", email: "", pass: "" };
-
-  if (!finalEmail) { errors.user = "Please enter your email."; }
-  if (!finalPass) { errors.pass = "Please enter your password."; }
-
-  if (!errors.user && !errors.pass) {
-    if (CLOUD) {
-      var problem = await cloudAuth(signUpMode, finalUser, finalEmail, finalPass); 
-      if (problem) { document.getElementById("passError").textContent = problem; }
-      return;
-    }
-    
-    // Local fallback if database is disconnected
-    var list = accounts();
-    if (signUpMode) {
-      finishLogin(finalUser, "Welcome!");
-    } else {
-      var account = list.find(function (a) { return a.email.toLowerCase() === finalEmail.toLowerCase(); });
-      if (account) finishLogin(account.username, "Welcome back!");
-      else { document.getElementById("userError").textContent = "Account not found."; }
-    }
+  var validEmail = function (t) { return /^\S+@\S+\.\S+$/.test(t); };
+  if (signUpMode) {
+    if (!/^[A-Za-z0-9_]{3,20}$/.test(ident)) { userErr.textContent = "Username: 3-20 letters, numbers or _ only."; }
+    if (!validEmail(email)) { emailErr.textContent = "Please enter a valid email."; }
+    if (pass.length < 6) { passErr.textContent = "Password must be at least 6 characters."; }
+  } else {
+    if (!ident) { userErr.textContent = CLOUD ? "Please enter your email." : "Please enter your email or username."; }
+    else if (CLOUD && !validEmail(ident)) { userErr.textContent = "Enter the email you signed up with."; }
+    if (!pass) { passErr.textContent = "Please enter your password."; }
   }
-  
-  document.getElementById("userError").textContent = errors.user;
-  document.getElementById("passError").textContent = errors.pass;
+  if (emailErr.textContent || userErr.textContent || passErr.textContent) { return; }
+
+  var btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  btn.textContent = "Please wait...";
+  try {
+    var problem;
+    if (CLOUD) {
+      // cloudAuth(isSignUp, user, email, pass): when signing in, "user" holds the email
+      problem = await cloudAuth(signUpMode, ident, signUpMode ? email : ident, pass);
+    } else {
+      problem = await localAuth(signUpMode, ident, email, pass);
+    }
+    if (problem) {
+      var ok = problem.indexOf("Account created") === 0;      // "check your email" is good news, not an error
+      if (ok) { showMessage(problem); signUpMode = false; paintAuthMode(); document.getElementById("pass").value = ""; }
+      else { passErr.textContent = problem; }
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = signUpMode ? "Sign Up" : "Sign In";
+  }
 };
-    // ... (rest of your local login logic)
+
+// Browser-only accounts (used when the online database is not connected). Returns "" or an error message.
+async function localAuth(isSignUp, ident, email, pass) {
+  var list = accounts();
+  if (isSignUp) {
+    var name = ident.toLowerCase();
+    if (list.some(function (a) { return a.username.toLowerCase() === name; })) { return "That username is already taken."; }
+    if (list.some(function (a) { return a.email.toLowerCase() === email.toLowerCase(); })) { return "That email is already registered."; }
+    var salt = Math.random().toString(36).slice(2);
+    list.push({ username: ident, email: email, salt: salt, hash: await hashPassword(pass, salt), displayName: ident, handle: "@" + ident, bio: "Film lover" });
+    localStorage.setItem("filmlify_accounts", JSON.stringify(list));
+    finishLogin(ident, "Welcome to Filmlify, " + ident + "!");
+    return "";
+  }
+  var key = ident.toLowerCase();
+  var account = list.find(function (a) { return a.username.toLowerCase() === key || a.email.toLowerCase() === key; });
+  if (!account || account.hash !== await hashPassword(pass, account.salt)) { return "Wrong email/username or password."; }
+  finishLogin(account.username, "Welcome back, " + account.username + "!");
+  return "";
+}
 
 // Google button (needs a Google account setup + server to really work)
 document.getElementById("googleBtn").onclick = function () {
@@ -1683,8 +1708,10 @@ async function cloudAuth(isSignUp, user, email, pass) {
     if (isSignUp) {
       user = user.toLowerCase();
       if (!/^[a-z0-9_]{3,20}$/.test(user)) { return "Username: 3-20 letters, numbers or _ only."; }
-      var taken = await db("profiles?username=eq." + encodeURIComponent(user) + "&select=id");
-      if (taken.length) { return "That username is already taken."; }
+      try {
+        var taken = await db("profiles?username=eq." + encodeURIComponent(user) + "&select=id");
+        if (taken && taken.length) { return "That username is already taken."; }
+      } catch (e) { console.warn("Could not check the username:", e); }
       data = await authCall("signup", { email: email, password: pass, data: { username: user } });
     } else {
       if (!/^\S+@\S+\.\S+$/.test(user)) { return "Enter the email you signed up with."; }
@@ -1889,8 +1916,6 @@ window.addEventListener("hashchange", function () { if (location.hash === "#peop
 if (location.hash === "#people") { loadPeople(); }
 
 if (CLOUD) {
-  document.querySelector('label[for="user"]').textContent = "Email";
-  document.getElementById("user").placeholder = "Enter your email";
   refreshFollowing().then(loadFriendFeed);
 }
 

@@ -453,14 +453,14 @@
           <input type="email" id="email" placeholder="Enter your email">
           <div class="error" id="emailError"></div>
         </div>
-        <label for="user">Email or Username</label>
+        <label for="loginIdentifier" id="identLabel">Email or Username</label>
         <input type="text" id="loginIdentifier" placeholder="Enter your email or username">
         <div class="error" id="userError"></div>
         <label for="pass">Password</label>
-        <input type="password" id="pass" placeholder="Enter your password">
+        <input type="password" id="pass" placeholder="Enter your password" autocomplete="current-password">
         <div class="error" id="passError"></div>
         <label><input type="checkbox" id="showPass"> Show password</label>
-        <button class="btn wide" id="submitBtn">Sign In</button>
+        <button type="submit" class="btn wide" id="submitBtn">Sign In</button>
         <p style="text-align:center; margin:14px 0">OR</p>
         <button type="button" class="btn outline wide" id="googleBtn" style="margin:0">Continue with Google</button>
       </form>
