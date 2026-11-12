@@ -325,7 +325,7 @@ async function loadBackdrops() {
       banners[i].style.backgroundImage =
         "linear-gradient(90deg, #0b1124dd, #0b112455), url(" + BACKDROP_URL + item.backdrop_path + ")";
       banners[i].style.backgroundSize = "cover";
-      banners[i].style.backgroundPosition = "center";
+      banners[i].style.backgroundPosition = "center 30%";
     }
   }
 }
