@@ -33,11 +33,12 @@ window.fetch = async function (url, options) {
 /* ============ 1. SHOW ONE PAGE AT A TIME ============ */
 // Each page is a <div class="page" id="...">. The link (#movies, #tv ...) decides which one shows.
 function showPage() {
-  var name = location.hash.replace("#", "") || "home";
+  var raw = location.hash.replace("#", "") || "home";
+  var name = raw.split("/")[0];                       // "#user/123" becomes "user"
   if (!document.getElementById(name)) { name = "home"; }
 
   // The Profile needs a login. The Login page is pointless if you are already logged in.
-  if ((name === "profile" || name === "people") && !currentUser()) {
+  if ((name === "profile" || name === "people" || name === "user") && !currentUser()) {
     returnTo = "#" + name;
     showMessage("Please log in to see this page.");
     location.hash = "#login";
@@ -50,13 +51,21 @@ function showPage() {
   });
 
   // Highlight the menu link (the login page highlights "Profile")
-  var menuName = (name === "login") ? "profile" : name;
+  var menuName = (name === "login") ? "profile" : (name === "user" ? "people" : name);
   document.querySelectorAll("nav a").forEach(function (link) {
     link.classList.toggle("active", link.getAttribute("href") === "#" + menuName);
   });
   window.scrollTo(0, 0);
 }
-window.addEventListener("hashchange", showPage);
+window.addEventListener("hashchange", function () {
+  showPage(); // Switch the page view
+  
+  // If the URL is #user/123, load that user's profile
+  if (location.hash.startsWith("#user/")) {
+    var id = location.hash.replace("#user/", "");
+    loadUserProfile(id);
+  }
+});
 showPage();
 
 /* ============ 2. SMALL POP-UP MESSAGE ============ */
@@ -1510,7 +1519,7 @@ document.getElementById("mFavorite").onclick = function () {
   if (exists) {
     favs = favs.filter(function (f) { return f.media_type + "-" + f.id !== key; });
     showMessage("Removed from your favorites.");
-    cloudListRemove("favorites", key);                        // ← NEW
+    cloudListRemove("favorites", key);                        
   } else {
     var same = favs.filter(function (f) { return f.media_type === current.media_type; }).length;
     if (same >= 5) {
@@ -1519,7 +1528,7 @@ document.getElementById("mFavorite").onclick = function () {
     }
     favs.push(slim(current));
     showMessage("Added to your favorites!");
-    cloudListAdd("favorites", current);                        // ← NEW
+    cloudListAdd("favorites", current);                        
   }
   saveList("filmlify_favorites", favs);
   renderProfile();
@@ -1755,17 +1764,34 @@ function personRow(p) {
   var row = document.createElement("div");
   row.className = "item";
   var text = document.createElement("span");
-  var name = document.createElement("b");
-  name.textContent = p.display_name || p.username;
+
+  // Make the display name a link to their profile
+  var nameLink = document.createElement("a");
+  nameLink.href = "#user/" + p.id;
+  nameLink.style.fontWeight = "bold";
+  nameLink.textContent = p.display_name || p.username;
+
+  // Make the @username a link too
+  var handleLink = document.createElement("a");
+  handleLink.href = "#user/" + p.id;
+  handleLink.style.color = "var(--muted)";
   var handle = document.createElement("small");
   handle.textContent = "@" + p.username;
-  text.appendChild(name);
+  handleLink.appendChild(handle);
+
+  text.appendChild(nameLink);
   text.appendChild(document.createElement("br"));
-  text.appendChild(handle);
+  text.appendChild(handleLink);
+
   var button = document.createElement("button");
   button.className = "btn small";
   button.textContent = myFollowing.indexOf(p.id) >= 0 ? "Following ✓" : "Follow";
-  button.onclick = function () { toggleFollowUser(p.id, p.username); };
+  
+  button.onclick = function (e) { 
+    e.stopPropagation(); // Prevents the click from bubbling up
+    toggleFollowUser(p.id, p.username); 
+  };
+  
   row.appendChild(text);
   row.appendChild(button);
   return row;
@@ -1787,10 +1813,21 @@ async function searchPeople() {
   try {
     var me = currentUser();
     var found = await db("profiles?username=ilike.*" + encodeURIComponent(text) + "*&limit=10&select=id,username,display_name");
-    fillPeopleList(box, found.filter(function (p) { return p.id !== me.id; }), "Nobody found with that username.");
-  } catch (e) { console.error(e); box.textContent = "Search failed. Please try again."; }
+    
+    box.replaceChildren();
+    if (found.filter(function(p) { return p.id !== me.id; }).length === 0) {
+      box.textContent = "Nobody found with that username.";
+    }
+    
+    // Use personRow so they are clickable!
+    found.filter(function(p) { return p.id !== me.id; }).forEach(function (p) {
+      box.appendChild(personRow(p));
+    });
+  } catch (e) { 
+    console.error(e); 
+    box.textContent = "Search failed. Please try again."; 
+  }
 }
-
 async function loadPeople() {
   var note = document.getElementById("peopleNote");
   if (!CLOUD) {
@@ -2342,3 +2379,135 @@ loadMyBookings();
 // Keep the seat map fresh while the Theater page is open (other people may book seats)
 setInterval(function () { if (location.hash === "#theater" && el("bookTitle").textContent) { loadBookedSeats(); } }, 15000);
 window.addEventListener("focus", function () { if (location.hash === "#theater" && el("bookTitle").textContent) { loadBookedSeats(); } });
+
+
+/* ============ 27. USER PROFILES (CLICKABLE FROM FOLLOWERS/FOLLOWING) ============ */
+async function loadUserProfile(userId) {
+  if (!CLOUD) { showMessage("Profiles need the online database."); return; }
+
+  // 1. Public profile info
+  var profile;
+  try {
+    var rows = await db("profiles?id=eq." + userId + "&select=id,username,display_name,bio");
+    profile = rows[0];
+  } catch (e) { console.error(e); }
+  
+  if (!profile) {
+    document.getElementById("uName").textContent = "User not found";
+    return;
+  }
+
+  document.getElementById("uName").textContent   = profile.display_name || profile.username;
+  document.getElementById("uHandle").textContent = "@" + profile.username;
+  document.getElementById("uBio").textContent    = profile.bio || "";
+  document.getElementById("uAvatar").textContent = (profile.display_name || profile.username).charAt(0).toUpperCase();
+
+  // 2. Follow button + counts
+  await refreshFollowing();                          
+  var isFollowing = myFollowing.indexOf(userId) >= 0;
+  var followBox = document.getElementById("uFollowBox");
+  followBox.replaceChildren();
+  
+  var btn = document.createElement("button");
+  btn.className = "btn small";
+  btn.textContent = isFollowing ? "Following ✓" : "Follow";
+  btn.onclick = async function () {
+    await toggleFollowUser(userId, profile.username);
+    loadUserProfile(userId); // Re-render the page after follow/unfollow
+  };
+  followBox.appendChild(btn);
+
+  try {
+    var f1 = await db("follows?following=eq." + userId + "&select=follower");
+    var f2 = await db("follows?follower=eq."  + userId + "&select=following");
+    document.getElementById("uFollowers").textContent = f1.length;
+    document.getElementById("uFollowing").textContent = f2.length;
+  } catch (e) { console.error(e); }
+
+  // 3. Their favorites
+  try {
+    var favs = await db("favorites?user_id=eq." + userId + "&select=*&order=created_at.desc");
+    document.getElementById("uFavorites").textContent = favs.length;
+
+    var filmsBox = document.getElementById("uFavFilms");
+    var showsBox = document.getElementById("uFavShows");
+    filmsBox.replaceChildren();
+    showsBox.replaceChildren();
+    
+    favs.filter(function (f) { return f.media_type === "movie"; })
+        .slice(0, 5)
+        .forEach(function (f) { 
+          var card = makeCard(fromRow(f));
+          // If the database row already has the poster, show it immediately
+          if (f.poster) {
+            var pic = card.querySelector(".poster");
+            if(pic) { pic.style.backgroundImage = "url(" + POSTER_URL + f.poster + ")"; pic.classList.add("has-image"); }
+          }
+          filmsBox.appendChild(card); 
+        });
+        
+    favs.filter(function (f) { return f.media_type === "tv"; })
+        .slice(0, 5)
+        .forEach(function (f) { 
+          var card = makeCard(fromRow(f));
+          if (f.poster) {
+            var pic = card.querySelector(".poster");
+            if(pic) { pic.style.backgroundImage = "url(" + POSTER_URL + f.poster + ")"; pic.classList.add("has-image"); }
+          }
+          showsBox.appendChild(card); 
+        });
+        
+    if (filmsBox.updateArrows) { filmsBox.updateArrows(); }
+    if (showsBox.updateArrows) { showsBox.updateArrows(); }
+  } catch (e) { console.error("Favorites:", e); }
+
+  // 4. Their reviews
+  try {
+    var reviews = await db("reviews?user_id=eq." + userId + "&select=*&order=created_at.desc&limit=20");
+    document.getElementById("uReviews").textContent = reviews.length;
+
+    var reviewBox = document.getElementById("uReviewList");
+    reviewBox.replaceChildren();
+    if (reviews.length === 0) { reviewBox.textContent = "No reviews yet."; }
+    
+    reviews.forEach(function (r) {
+      var row = document.createElement("div");
+      row.className = "item with-pic";
+      var pic = document.createElement("div");
+      pic.className = "pic tall";
+      if (r.poster) {
+        pic.classList.add("has-image");
+        pic.style.backgroundImage = "url(" + POSTER_URL + r.poster + ")";
+      }
+      var text = document.createElement("span");
+      var title = document.createElement("b");
+      title.textContent = r.title + " ";
+      var stars = document.createElement("span");
+      stars.className = "star";
+      stars.textContent = starText(r.stars);
+      text.appendChild(title);
+      text.appendChild(stars);
+      if (r.body) {
+        text.appendChild(document.createElement("br"));
+        text.appendChild(document.createTextNode(r.body));
+      }
+      var when = document.createElement("small");
+      when.textContent = new Date(r.created_at).toLocaleDateString("en-US",
+        { year: "numeric", month: "short", day: "numeric" });
+      text.appendChild(document.createElement("br"));
+      text.appendChild(when);
+      row.appendChild(pic);
+      row.appendChild(text);
+      reviewBox.appendChild(row);
+    });
+  } catch (e) { console.error("Reviews:", e); }
+  
+  // Update slider arrows for the newly loaded rows
+  updateAllArrows(); 
+}
+
+// Connect the back button
+var backBtn = document.getElementById("backToPeople");
+if (backBtn) {
+  backBtn.onclick = function () { location.hash = "#people"; };
+}
