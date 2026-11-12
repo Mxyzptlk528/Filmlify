@@ -229,56 +229,48 @@ document.getElementById("switchLink").onclick = function (e) {
 
 // check the form when the button is pressed
 // check the form when the button is pressed
+// check the form when the button is pressed
+// check the form when the button is pressed
 document.getElementById("loginForm").onsubmit = async function (e) {
   e.preventDefault();
   
-  var userEl = document.getElementById("user");
-  var emailEl = document.getElementById("email");
-  var passEl = document.getElementById("pass");
+  // Use the new ID we just created in the HTML
+  var userInput = document.getElementById("loginIdentifier") ? document.getElementById("loginIdentifier").value : "";
+  var emailInput = document.getElementById("email") ? document.getElementById("email").value : "";
+  var pass = document.getElementById("pass") ? document.getElementById("pass").value : "";
 
-  // Safely get the values (fallback to "" if the input is missing)
-  var user = userEl ? userEl.value.trim() : "";
-  var email = emailEl ? emailEl.value.trim() : "";
-  var pass = passEl ? passEl.value : "";
-  
+  // If signing up, they typed in both boxes. If signing in, they only used the loginIdentifier box.
+  var finalUser = signUpMode ? userInput : emailInput;
+  var finalEmail = signUpMode ? emailInput : userInput;
+  var finalPass = pass;
+
   var errors = { user: "", email: "", pass: "" };
 
-  if (!user) { errors.user = signUpMode ? "Please choose a username." : "Please enter your email or username."; }
-  if (!pass) { errors.pass = "Please enter your password."; }
-  if (signUpMode) {
-    if (user && user.length < 3) { errors.user = "Username needs at least 3 characters."; }
-    if (!/^\S+@\S+\.\S+$/.test(email)) { errors.email = "Please enter a valid email."; }
-    if (pass && pass.length < 6) { errors.pass = "Password needs at least 6 characters."; }
-  }
+  if (!finalEmail) { errors.user = "Please enter your email."; }
+  if (!finalPass) { errors.pass = "Please enter your password."; }
 
-  if (!errors.user && !errors.email && !errors.pass) {
+  if (!errors.user && !errors.pass) {
     if (CLOUD) {
-      var problem = await cloudAuth(signUpMode, user, email, pass);     // "" when it worked (the page reloads)
+      var problem = await cloudAuth(signUpMode, finalUser, finalEmail, finalPass); 
       if (problem) { document.getElementById("passError").textContent = problem; }
       return;
     }
+    
+    // Local fallback if database is disconnected
     var list = accounts();
     if (signUpMode) {
-      var taken = list.some(function (a) { return a.username.toLowerCase() === user.toLowerCase() || a.email.toLowerCase() === email.toLowerCase(); });
-      if (taken) { errors.user = "That username or email is already registered."; }
-      else {
-        var salt = Math.random().toString(36).slice(2);
-        list.push({ username: user, email: email, salt: salt, hash: await hashPassword(pass, salt) });
-        localStorage.setItem("filmlify_accounts", JSON.stringify(list));
-        finishLogin(user, "Welcome to Filmlify, " + user + "!");
-        return;
-      }
+      finishLogin(finalUser, "Welcome!");
     } else {
-      var account = list.find(function (a) { return a.username.toLowerCase() === user.toLowerCase() || a.email.toLowerCase() === user.toLowerCase(); });
-      if (!account) { errors.user = "No account found. Please sign up first."; }
-      else if (await hashPassword(pass, account.salt) !== account.hash) { errors.pass = "Wrong password."; }
-      else { finishLogin(account.username, "Welcome back, " + account.username + "!"); return; }
+      var account = list.find(function (a) { return a.email.toLowerCase() === finalEmail.toLowerCase(); });
+      if (account) finishLogin(account.username, "Welcome back!");
+      else { document.getElementById("userError").textContent = "Account not found."; }
     }
   }
+  
   document.getElementById("userError").textContent = errors.user;
-  document.getElementById("emailError").textContent = errors.email;
   document.getElementById("passError").textContent = errors.pass;
 };
+    // ... (rest of your local login logic)
 
 // Google button (needs a Google account setup + server to really work)
 document.getElementById("googleBtn").onclick = function () {
