@@ -228,16 +228,23 @@ document.getElementById("switchLink").onclick = function (e) {
 };
 
 // check the form when the button is pressed
+// check the form when the button is pressed
 document.getElementById("loginForm").onsubmit = async function (e) {
   e.preventDefault();
-  var user = document.getElementById("user").value.trim();
-  var email = document.getElementById("email").value.trim();
-  var pass = document.getElementById("pass").value;
+  
+  var userEl = document.getElementById("user");
+  var emailEl = document.getElementById("email");
+  var passEl = document.getElementById("pass");
+
+  // Safely get the values (fallback to "" if the input is missing)
+  var user = userEl ? userEl.value.trim() : "";
+  var email = emailEl ? emailEl.value.trim() : "";
+  var pass = passEl ? passEl.value : "";
+  
   var errors = { user: "", email: "", pass: "" };
 
   if (!user) { errors.user = signUpMode ? "Please choose a username." : "Please enter your email or username."; }
   if (!pass) { errors.pass = "Please enter your password."; }
-
   if (signUpMode) {
     if (user && user.length < 3) { errors.user = "Username needs at least 3 characters."; }
     if (!/^\S+@\S+\.\S+$/.test(email)) { errors.email = "Please enter a valid email."; }
