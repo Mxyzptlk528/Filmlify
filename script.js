@@ -574,7 +574,12 @@ function reviewElement(r, showTitle) {
     renderProfile();
     if (current) { paintReviews(); }
   };
+  var edit = document.createElement("button");        // edit this review in a pop-up
+  edit.className = "btn small outline";
+  edit.textContent = "Edit";
+  edit.onclick = function () { openEditReview(r); };
   row.appendChild(inner);
+  row.appendChild(edit);
   row.appendChild(del);
   return row;
 }
@@ -1253,39 +1258,6 @@ function ensureReviewIds() {
   if (fixed) { saveList("filmlify_reviews", reviews); }
 }
 
-function renderCustomLists() {
-  var box = document.getElementById("customLists");
-  box.replaceChildren();
-  var lists = getList("filmlify_customlists");
-  if (lists.length === 0) { box.textContent = "No lists yet. Create one below."; }
-  lists.forEach(function (l) {
-    var row = document.createElement("div");
-    row.className = "item";
-    var info = document.createElement("span");
-    var name = document.createElement("b");
-    name.textContent = l.name + " (" + l.items.length + ")";
-    info.appendChild(name);
-    if (l.items.length) {
-      var titles = document.createElement("small");
-      titles.textContent = l.items.map(function (i) { return i.title; }).join(", ");
-      info.appendChild(document.createElement("br"));
-      info.appendChild(titles);
-    }
-    var del = document.createElement("button");
-    del.className = "btn small";
-    del.textContent = "✕";
-    del.title = "Delete list";
-    del.onclick = function () {
-      saveList("filmlify_customlists", getList("filmlify_customlists").filter(function (x) { return x.id !== l.id; }));
-      renderCustomLists();
-      paintListSelect();
-    };
-    row.appendChild(info);
-    row.appendChild(del);
-    box.appendChild(row);
-  });
-}
-
 function paintListSelect() {
   var select = document.getElementById("mListSelect");
   select.replaceChildren();
@@ -1329,25 +1301,6 @@ var profileInfo = {
   bio: me ? (me.bio || "Film lover") : ""
 };
 try { profileInfo = JSON.parse(localStorage.getItem(userKey("filmlify_profile"))) || profileInfo; } catch (e) {}
-function paintProfileInfo() {
-  document.getElementById("pName").textContent = profileInfo.name;
-  document.getElementById("pBio").textContent = profileInfo.handle + " • " + profileInfo.bio;
-  document.getElementById("pAvatar").textContent = profileInfo.name.charAt(0).toUpperCase();
-}
-document.getElementById("editProfile").onclick = function () {
-  if (!requireLogin("edit your profile")) { return; }
-  var name = prompt("Your name:", profileInfo.name);
-  if (name === null) { return; }
-  var handle = prompt("Your username (like @name):", profileInfo.handle);
-  if (handle === null) { return; }
-  var bio = prompt("A short bio:", profileInfo.bio);
-  if (bio === null) { return; }
-  profileInfo = { name: name.trim() || profileInfo.name, handle: handle.trim(), bio: bio.trim() };
-  try { localStorage.setItem(userKey("filmlify_profile"), JSON.stringify(profileInfo)); } catch (e) {}
-  paintProfileInfo();
-  cloudUpdateProfile(profileInfo);
-  showMessage("Profile updated!");
-};
 paintProfileInfo();
 renderProfile();
 
@@ -1501,27 +1454,6 @@ function slim(m) {
            first_air_date: m.first_air_date, genre_ids: m.genre_ids };
 }
 
-function fillFavorites(rowId, type) {
-  var row = document.getElementById(rowId);
-  row.replaceChildren();
-  var favs = getList("filmlify_favorites").filter(function (f) { return f.media_type === type && f.poster_path; }).slice(0, 5);
-  favs.forEach(function (m) { row.appendChild(makeCard(m)); });          // click one to open it
-
-  for (var i = favs.length; i < 5; i++) {                                // empty "+" slots
-    var slot = document.createElement("div");
-    slot.className = "slot";
-    var box = document.createElement("div");
-    box.className = "slot-poster";
-    box.textContent = "+";
-    box.onclick = function () {
-      showMessage("Search for a title, open it, then press Add to Favorites.");
-      document.getElementById("search").focus();
-    };
-    slot.appendChild(box);
-    row.appendChild(slot);
-  }
-  if (row.updateArrows) { row.updateArrows(); }
-}
 function renderFavorites() {
   fillFavorites("favFilms", "movie");
   fillFavorites("favShows", "tv");
@@ -1786,42 +1718,6 @@ async function toggleFollowUser(id, username) {
 }
 
 // One row in a list of people
-function personRow(p) {
-  var row = document.createElement("div");
-  row.className = "item";
-  var text = document.createElement("span");
-
-  // Make the display name a link to their profile
-  var nameLink = document.createElement("a");
-  nameLink.href = "#user/" + p.id;
-  nameLink.style.fontWeight = "bold";
-  nameLink.textContent = p.display_name || p.username;
-
-  // Make the @username a link too
-  var handleLink = document.createElement("a");
-  handleLink.href = "#user/" + p.id;
-  handleLink.style.color = "var(--muted)";
-  var handle = document.createElement("small");
-  handle.textContent = "@" + p.username;
-  handleLink.appendChild(handle);
-
-  text.appendChild(nameLink);
-  text.appendChild(document.createElement("br"));
-  text.appendChild(handleLink);
-
-  var button = document.createElement("button");
-  button.className = "btn small";
-  button.textContent = myFollowing.indexOf(p.id) >= 0 ? "Following ✓" : "Follow";
-  
-  button.onclick = function (e) { 
-    e.stopPropagation(); // Prevents the click from bubbling up
-    toggleFollowUser(p.id, p.username); 
-  };
-  
-  row.appendChild(text);
-  row.appendChild(button);
-  return row;
-}
 function fillPeopleList(box, people, emptyText) {
   box.replaceChildren();
   if (people.length === 0) { box.textContent = emptyText; }
@@ -1829,7 +1725,7 @@ function fillPeopleList(box, people, emptyText) {
 }
 async function profilesByIds(ids) {
   if (ids.length === 0) { return []; }
-  return await db("profiles?id=in.(" + ids.join(",") + ")&select=id,username,display_name");
+  return await dbProfiles("id=in.(" + ids.join(",") + ")");
 }
 
 async function searchPeople() {
@@ -1838,21 +1734,9 @@ async function searchPeople() {
   if (text.length < 2) { box.textContent = "Type at least 2 letters."; return; }
   try {
     var me = currentUser();
-    var found = await db("profiles?username=ilike.*" + encodeURIComponent(text) + "*&limit=10&select=id,username,display_name");
-    
-    box.replaceChildren();
-    if (found.filter(function(p) { return p.id !== me.id; }).length === 0) {
-      box.textContent = "Nobody found with that username.";
-    }
-    
-    // Use personRow so they are clickable!
-    found.filter(function(p) { return p.id !== me.id; }).forEach(function (p) {
-      box.appendChild(personRow(p));
-    });
-  } catch (e) { 
-    console.error(e); 
-    box.textContent = "Search failed. Please try again."; 
-  }
+    var found = await dbProfiles("username=ilike.*" + encodeURIComponent(text) + "*&limit=10");
+    fillPeopleList(box, found.filter(function (p) { return p.id !== me.id; }), "Nobody found with that username.");
+  } catch (e) { console.error(e); box.textContent = "Search failed. Please try again."; }
 }
 async function loadPeople() {
   var note = document.getElementById("peopleNote");
@@ -2047,6 +1931,7 @@ async function syncFromCloud() {
                stars: r.stars, text: r.body || "",
                date: new Date(r.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) };
     }));
+    await pullOwnProfile();                            // your name, bio and picture
     renderProfile();
   } catch (e) {
     console.error("Could not load your saved data:", e);
@@ -2405,15 +2290,774 @@ setInterval(function () { if (location.hash === "#theater" && el("bookTitle").te
 window.addEventListener("focus", function () { if (location.hash === "#theater" && el("bookTitle").textContent) { loadBookedSeats(); } });
 
 
-/* ============ 27. USER PROFILES (CLICKABLE FROM FOLLOWERS/FOLLOWING) ============ */
+/* =====================================================================
+   27. MORE FEATURES: clickable lists and directors, Top 10 slideshow, profile photo,
+       followers / following pop-ups, favorites editing, custom lists, edit reviews
+   ===================================================================== */
+// ---------- Pop-up helpers ----------
+var modalClosers = {};            // pop-up id -> function that closes it (used by the Escape key)
+function setupModal(id, close) {
+  modalClosers[id] = close;
+  el(id).addEventListener("click", function (e) { if (e.target === this) { close(); } });
+}
+document.addEventListener("keydown", function (e) {            // Escape closes only the top-most pop-up
+  if (e.key !== "Escape") { return; }
+  var order = ["pickModal", "editReviewModal", "editProfileModal", "statsModal", "clModal", "featModal", "listModal"];
+  for (var i = 0; i < order.length; i++) {
+    if (el(order[i]).classList.contains("open")) { e.stopImmediatePropagation(); modalClosers[order[i]](); return; }
+  }
+}, true);
+function openModal(id) { el(id).classList.add("open"); }
+function closeModal(id) { el(id).classList.remove("open"); }
+
+// Search pop-up: type, see posters, click one. Gives back the TMDB item (or null if cancelled).
+function askTitle(question, current, kind) {          // kind: "movie", "tv", or nothing for both
+  return new Promise(function (resolve) {
+    var input = el("pickInput"), box = el("pickResults"), timer = null;
+    el("pickTitle").textContent = question;
+    input.placeholder = kind === "movie" ? "Search movies..." : kind === "tv" ? "Search TV shows..." : "Search movies or TV shows...";
+    input.value = current || ""; box.replaceChildren(); openModal("pickModal"); input.focus(); input.select();
+    function finish(result) {
+      clearTimeout(timer); closeModal("pickModal");
+      input.oninput = null; input.onkeydown = null; el("pickCancel").onclick = null; modalClosers.pickModal = function () {};
+      resolve(result);
+    }
+    async function search() {
+      var q = input.value.trim();
+      if (q.length < 2) { box.textContent = "Type at least 2 letters."; return; }
+      box.replaceChildren(spinner());
+      try {
+        var response = await fetch(TMDB_URL + "/search/" + (kind || "multi") + "?query=" + encodeURIComponent(q) + "&api_key=" + TMDB_KEY);
+        var data = await response.json();
+        if (input.value.trim() !== q) { return; }
+        var items = (data.results || []).filter(function (m) {
+          if (kind) { m.media_type = kind; return true; }
+          return m.media_type === "movie" || m.media_type === "tv";
+        }).slice(0, 8);
+        box.replaceChildren();
+        if (items.length === 0) { box.textContent = "No results for \"" + q + "\"."; return; }
+        items.forEach(function (m) {
+          var row = document.createElement("div"); row.className = "pick-item";
+          var pic = document.createElement("div"); pic.className = "mini-poster";
+          if (m.poster_path) { pic.style.backgroundImage = "url(" + POSTER_URL + m.poster_path + ")"; }
+          var info = document.createElement("span");
+          var name = document.createElement("b"); name.textContent = nameOf(m);
+          var meta = document.createElement("small"); meta.textContent = (m.media_type === "tv" ? "TV Show" : "Movie") + (yearOf(m) ? " • " + yearOf(m) : "");
+          info.appendChild(name); info.appendChild(document.createElement("br")); info.appendChild(meta);
+          row.appendChild(pic); row.appendChild(info);
+          row.onclick = function () { remember(m); finish(m); };
+          box.appendChild(row);
+        });
+      } catch (e) { box.textContent = "Could not reach TMDB. Check your internet connection."; }
+    }
+    input.oninput = function () { clearTimeout(timer); timer = setTimeout(search, 350); };
+    input.onkeydown = function (e) { if (e.key === "Enter") { clearTimeout(timer); search(); } };
+    el("pickCancel").onclick = function () { finish(null); };
+    modalClosers.pickModal = function () { finish(null); };
+    if (current) { search(); }
+  });
+}
+setupModal("pickModal", function () {});
+
+// A saved item only has a key like "movie-550": ask TMDB for the full details (poster, etc.)
+async function itemByKey(key) {
+  if (known[key] && known[key].poster_path) { return known[key]; }
+  var p = /^(movie|tv)-(\d+)$/.exec(key || "");
+  if (!p) { return null; }
+  try {
+    var r = await fetch(TMDB_URL + "/" + p[1] + "/" + p[2] + "?api_key=" + TMDB_KEY);
+    if (!r.ok) { return null; }
+    var m = await r.json();
+    m.media_type = p[1]; m.genre_ids = (m.genres || []).map(function (g) { return g.id; });
+    remember(m);
+    return m;
+  } catch (e) { return null; }
+}
+
+// ---------- Home: Lists For You ----------
+var HOME_LISTS = {
+  crime:    { title: "Masterpiece Crime Drama",                  genres: "80,18" },
+  thriller: { title: "Psychological Thrillers with Plot Twists", genres: "53,9648" },
+  scifi:    { title: "Essential Sci-fi Cinema",                  genres: "878" }
+};
+var homeListCache = {};
+async function loadHomeList(key) {
+  if (homeListCache[key]) { return homeListCache[key]; }
+  try {
+    var data = await (await fetch(TMDB_URL + "/discover/movie?with_genres=" + HOME_LISTS[key].genres + "&sort_by=vote_average.desc&vote_count.gte=5000&api_key=" + TMDB_KEY)).json();
+    var items = (data.results || []).filter(function (m) { return m.poster_path; }).map(function (m) { m.media_type = "movie"; return m; });
+    if (items.length) { homeListCache[key] = items; }
+    return items;
+  } catch (e) { return []; }
+}
+function showListModal(title, loader) {                // used by the Home lists and the TV community lists
+  var grid = el("listGrid");
+  el("listTitle").textContent = title;
+  grid.replaceChildren(spinner());
+  openModal("listModal");
+  loader().then(function (items) {
+    if (!el("listModal").classList.contains("open") || el("listTitle").textContent !== title) { return; }
+    grid.replaceChildren();
+    if (items.length === 0) { grid.textContent = "Could not load this list. Check your internet connection."; return; }
+    items.forEach(function (m) { grid.appendChild(makeCard(m)); });
+  });
+}
+function closeListModal() { closeModal("listModal"); }
+el("listClose").onclick = closeListModal;
+setupModal("listModal", closeListModal);
+el("listGrid").addEventListener("click", function (e) { if (e.target.closest(".card")) { closeListModal(); } });
+document.querySelectorAll(".list-link").forEach(function (item) {
+  var key = item.dataset.list;
+  loadHomeList(key).then(function (items) { if (items.length) { item.querySelector("small").textContent = items.length + " Films"; } });
+  item.onclick = function () { showListModal(HOME_LISTS[key].title, function () { return loadHomeList(key); }); };
+});
+
+// ---------- TV: Community Top Lists ----------
+var TV_LISTS = {
+  finales:    { title: "Shows with Perfect Series Finales", count: 12, query: "with_genres=18&vote_count.gte=3000" },
+  mystery:    { title: "Mind-Bending Mystery & Thrillers",  count: 15, query: "with_genres=9648&vote_count.gte=1000" },
+  scifi:      { title: "Best Sci-Fi Worldbuilding",         count: 19, query: "with_genres=10765&vote_count.gte=1500" },
+  crime:      { title: "Dark & Gritty Crime Sagas",         count: 20, query: "with_genres=80,18&vote_count.gte=1500" },
+  animated:   { title: "Top-Tier Animated Sagas",           count: 18, query: "with_genres=16&vote_count.gte=1000" },
+  miniseries: { title: "Peak TV Miniseries Masterpieces",   count: 10, query: "with_type=2&vote_count.gte=500" }
+};
+var tvListCache = {};
+async function loadTvList(key) {
+  if (tvListCache[key]) { return tvListCache[key]; }
+  try {
+    var response = await fetch(TMDB_URL + "/discover/tv?" + TV_LISTS[key].query + "&sort_by=vote_average.desc&api_key=" + TMDB_KEY);
+    if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
+    var data = await response.json();
+    var items = (data.results || []).filter(function (m) { return m.poster_path; }).slice(0, TV_LISTS[key].count);
+    items.forEach(function (m) { m.media_type = "tv"; });
+    if (items.length) { tvListCache[key] = items; }
+    return items;
+  } catch (error) { console.error("Could not load TV list " + key + ":", error); return []; }
+}
+document.querySelectorAll("[data-tvlist]").forEach(function (box) {
+  var key = box.dataset.tvlist;
+  box.onclick = function () { showListModal(TV_LISTS[key].title, function () { return loadTvList(key); }); };
+  box.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); box.onclick(); } };
+});
+
+// ---------- TV: Top 10 slideshow (slow cross-fade, every 7 seconds) ----------
+// TMDB ids of the ten shows, in order. "year" double-checks the id (a wrong id falls back to a search).
+var TOP10_TV = [
+  { id: 1396, name: "Breaking Bad", year: 2008 }, { id: 1398, name: "The Sopranos", year: 1999 },
+  { id: 1438, name: "The Wire", year: 2002 }, { id: 4613, name: "Band of Brothers", year: 2001 },
+  { id: 1399, name: "Game of Thrones", year: 2011 }, { id: 87108, name: "Chernobyl", year: 2019 },
+  { id: 60059, name: "Better Call Saul", year: 2015 }, { id: 1104, name: "Mad Men", year: 2007 },
+  { id: 1919, name: "The Twilight Zone", year: 1959 }, { id: 2316, name: "The Office", year: 2005 }
+];
+var top10Shows = [], top10Index = 0, top10Timer = null, top10Layer = "t10BgA", top10Hover = false;
+
+async function fetchTop10Show(entry) {
+  var extra = "?append_to_response=content_ratings&api_key=" + TMDB_KEY;
+  function matches(d) {
+    return d && d.name && d.name.toLowerCase().indexOf(entry.name.toLowerCase()) !== -1 && (d.first_air_date || "").slice(0, 4) === String(entry.year);
+  }
+  try {
+    var d = await (await fetch(TMDB_URL + "/tv/" + entry.id + extra)).json();
+    if (!matches(d)) {
+      var found = await (await fetch(TMDB_URL + "/search/tv?query=" + encodeURIComponent(entry.name) + "&first_air_date_year=" + entry.year + "&api_key=" + TMDB_KEY)).json();
+      var list = found.results || [];
+      var hit = list.find(function (r) { return r.name.toLowerCase() === entry.name.toLowerCase(); }) || list[0];
+      if (!hit) { return null; }
+      d = await (await fetch(TMDB_URL + "/tv/" + hit.id + extra)).json();
+    }
+    d.media_type = "tv";
+    d.genre_ids = (d.genres || []).map(function (g) { return g.id; });
+    return d;
+  } catch (e) { return null; }
+}
+function showTop10(index) {
+  if (top10Shows.length === 0) { return; }
+  top10Index = (index + top10Shows.length) % top10Shows.length;
+  var item = top10Shows[top10Index], d = item.show;
+  // cross-fade: the new picture fades in on the hidden layer while the old one fades out
+  var next = top10Layer === "t10BgA" ? "t10BgB" : "t10BgA";
+  el(next).style.backgroundImage = d.backdrop_path ? "url(" + BACKDROP_URL + d.backdrop_path + ")" : "linear-gradient(135deg, #3a4488, #0f1530)";
+  el(next).classList.add("show"); el(top10Layer).classList.remove("show"); top10Layer = next;
+
+  var us = ((d.content_ratings || {}).results || []).find(function (r) { return r.iso_3166_1 === "US"; });
+  var first = (d.first_air_date || "").slice(0, 4), last = (d.last_air_date || "").slice(0, 4);
+  var years = d.in_production ? first + "-Present" : (last && last !== first ? first + "-" + last : first);
+  var seasons = d.number_of_seasons ? d.number_of_seasons + (d.number_of_seasons === 1 ? " Season" : " Seasons") : "";
+  var meta = [us && us.rating, (d.genres || []).slice(0, 2).map(function (g) { return g.name; }).join(", "), seasons, years].filter(Boolean).join(" • ");
+  var story = d.overview || "";
+  if (story.length > 230) { story = story.slice(0, 227).replace(/\s+\S*$/, "") + "..."; }
+  var creators = (d.created_by || []).map(function (c) { return c.name; }).join(", ");
+
+  var box = el("t10Text");
+  box.style.animation = "none"; void box.offsetWidth; box.style.animation = "";        // replay the fade-in
+  el("t10Title").textContent = "#" + item.rank + " " + d.name;
+  el("t10By").textContent = creators ? "Created by " + creators : "";
+  el("t10Meta").textContent = meta;
+  el("t10Story").textContent = story;
+  document.querySelectorAll("#t10Dots button").forEach(function (dot, i) { dot.classList.toggle("on", i === top10Index); });
+}
+function restartTop10Timer() {
+  clearInterval(top10Timer);
+  if (top10Hover) { return; }                          // stays paused while the mouse is over the slideshow
+  top10Timer = setInterval(function () { if (el("top10").offsetParent !== null) { showTop10(top10Index + 1); } }, 7000);
+}
+(async function () {
+  var all = await Promise.all(TOP10_TV.map(fetchTop10Show));
+  top10Shows = all.map(function (show, i) { return show ? { rank: i + 1, show: show } : null; }).filter(Boolean);
+  if (top10Shows.length === 0) { el("t10Title").textContent = "Could not load the Top 10. Check your internet connection."; return; }
+  top10Shows.forEach(function (item, i) {
+    var dot = document.createElement("button");
+    dot.title = "#" + item.rank + " " + item.show.name;
+    dot.onclick = function () { showTop10(i); restartTop10Timer(); };
+    el("t10Dots").appendChild(dot);
+  });
+  el("t10Prev").onclick = function () { showTop10(top10Index - 1); restartTop10Timer(); };
+  el("t10Next").onclick = function () { showTop10(top10Index + 1); restartTop10Timer(); };
+  el("t10Add").onclick = function () { toggleWatchlist(top10Shows[top10Index].show); };
+  el("t10More").onclick = function () { openMovie(top10Shows[top10Index].show); };
+  el("top10").addEventListener("mouseenter", function () { top10Hover = true; clearInterval(top10Timer); });     // pause while the mouse is over it
+  el("top10").addEventListener("mouseleave", function () { top10Hover = false; restartTop10Timer(); });
+  showTop10(0);
+  restartTop10Timer();
+})();
+
+// ---------- Movies: Popular Directors and Featured Movie Lists ----------
+// Featured lists are typed here as [title, year]. The year helps TMDB find the right movie.
+var FEATURED_LISTS = {
+  mcu: { name: "Complete MCU Infinity Saga", about: "All 23 films of the Infinity Saga, in release order.", films: [
+    ["Iron Man", 2008], ["The Incredible Hulk", 2008], ["Iron Man 2", 2010], ["Thor", 2011], ["Captain America: The First Avenger", 2011],
+    ["The Avengers", 2012], ["Iron Man 3", 2013], ["Thor: The Dark World", 2013], ["Captain America: The Winter Soldier", 2014],
+    ["Guardians of the Galaxy", 2014], ["Avengers: Age of Ultron", 2015], ["Ant-Man", 2015], ["Captain America: Civil War", 2016],
+    ["Doctor Strange", 2016], ["Guardians of the Galaxy Vol. 2", 2017], ["Spider-Man: Homecoming", 2017], ["Thor: Ragnarok", 2017],
+    ["Black Panther", 2018], ["Avengers: Infinity War", 2018], ["Ant-Man and the Wasp", 2018], ["Captain Marvel", 2019],
+    ["Avengers: Endgame", 2019], ["Spider-Man: Far From Home", 2019] ] },
+  thrillers: { name: "Dark Thrillers & Mystery Masterpiece", about: "Twisty, unsettling thrillers and mysteries.", films: [
+    ["Se7en", 1995], ["Zodiac", 2007], ["Prisoners", 2013], ["Gone Girl", 2014], ["Shutter Island", 2010], ["Memento", 2000],
+    ["The Silence of the Lambs", 1991], ["Mystic River", 2003], ["Memories of Murder", 2003], ["Oldboy", 2003], ["The Prestige", 2006],
+    ["Mulholland Drive", 2001], ["The Usual Suspects", 1995], ["Fight Club", 1999], ["Black Swan", 2010], ["Nightcrawler", 2014],
+    ["Sicario", 2015], ["Searching", 2018], ["Knives Out", 2019], ["Parasite", 2019], ["Wind River", 2017], ["Gone Baby Gone", 2007],
+    ["The Girl with the Dragon Tattoo", 2011], ["Side Effects", 2013], ["Enemy", 2013], ["No Country for Old Men", 2007], ["Primal Fear", 1996] ] },
+  noir: { name: "Neo-Noir Cinema Essential", about: "Shadows, moral gray areas and rain-slicked streets.", films: [
+    ["Blade Runner", 1982], ["Chinatown", 1974], ["L.A. Confidential", 1997], ["Drive", 2011], ["Blade Runner 2049", 2017], ["Sin City", 2005],
+    ["Brick", 2005], ["Blood Simple", 1984], ["Body Heat", 1981], ["The Big Lebowski", 1998], ["Fargo", 1996], ["Collateral", 2004],
+    ["Heat", 1995], ["Taxi Driver", 1976], ["Hell or High Water", 2016], ["Inherent Vice", 2014], ["The Long Goodbye", 1973],
+    ["Night Moves", 1975], ["Angel Heart", 1987], ["Lost Highway", 1997], ["The Man Who Wasn't There", 2001], ["Miller's Crossing", 1990],
+    ["The Last Seduction", 1994], ["Red Rock West", 1993], ["Bound", 1996], ["Insomnia", 2002], ["Kiss Kiss Bang Bang", 2005],
+    ["Thief", 1981], ["To Live and Die in L.A.", 1985], ["Under the Silver Lake", 2018] ] }
+};
+var movieYearCache = {}, featToken = 0, featError = "";
+
+async function searchByTitle(title, year) {
+  var url = TMDB_URL + "/search/movie?query=" + encodeURIComponent(title) + (year ? "&year=" + year : "") + "&api_key=" + TMDB_KEY;
+  var response = await fetch(url);
+  if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
+  var withPoster = ((await response.json()).results || []).filter(function (m) { return m.poster_path; });
+  var lower = title.toLowerCase();
+  return withPoster.find(function (m) { return (m.title || "").toLowerCase() === lower; }) || withPoster[0] || null;
+}
+async function findFilm(title, year) {                 // title + year first, then the title alone
+  var cacheId = title + "|" + year;
+  if (cacheId in movieYearCache) { return movieYearCache[cacheId]; }
+  var movie = null;
+  try { movie = await searchByTitle(title, year); } catch (e) { featError = e.message; }
+  if (!movie) { try { movie = await searchByTitle(title, 0); } catch (e) { featError = e.message; } }
+  if (movie) { movie.media_type = "movie"; movieYearCache[cacheId] = movie; }
+  return movie;
+}
+function openFeat(title, sub, photoUrl) {
+  el("featTitle").textContent = title;
+  el("featSub").textContent = sub || "";
+  el("featPhoto").hidden = !photoUrl;
+  el("featPhoto").style.backgroundImage = photoUrl ? "url(" + photoUrl + ")" : "";
+  el("featGrid").replaceChildren(spinner());
+  openModal("featModal");
+}
+function closeFeat() { featToken++; closeModal("featModal"); }
+function featNote(text) {
+  var note = document.createElement("p"); note.className = "empty-note"; note.textContent = text;
+  el("featGrid").replaceChildren(note);
+}
+async function openFeaturedList(id) {
+  var list = FEATURED_LISTS[id], token = ++featToken;
+  if (!list) { return; }
+  featError = "";
+  openFeat(list.name + " (" + list.films.length + " films)", list.about);
+  var grid = el("featGrid"), added = 0;
+  for (var i = 0; i < list.films.length; i += 6) {            // 6 at a time, so TMDB is not asked too much at once
+    var found = await Promise.all(list.films.slice(i, i + 6).map(function (f) { return findFilm(f[0], f[1]); }));
+    if (token !== featToken) { return; }
+    if (added === 0) { grid.replaceChildren(); }
+    found.forEach(function (m) { if (m) { grid.appendChild(makeCard(m)); added++; } });
+  }
+  if (added === 0) { featNote("Sorry, the films could not be loaded." + (featError ? " (" + featError + ")" : " Check your internet connection.")); }
+}
+async function openDirector(name) {
+  var token = ++featToken;
+  openFeat(name, "Loading...");
+  var person = await searchPerson(name);
+  if (token !== featToken) { return; }
+  if (!person) { el("featSub").textContent = ""; featNote("Sorry, no details found for " + name + "."); return; }
+  if (person.profile_path) { el("featPhoto").hidden = false; el("featPhoto").style.backgroundImage = "url(" + PROFILE_URL + person.profile_path + ")"; }
+  try {
+    var response = await fetch(TMDB_URL + "/person/" + person.id + "?append_to_response=movie_credits&api_key=" + TMDB_KEY);
+    if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
+    var d = await response.json();
+    if (token !== featToken) { return; }
+    var bio = (d.biography || "").trim();
+    if (bio.length > 320) { bio = bio.slice(0, 317).replace(/\s+\S*$/, "") + "..."; }
+    var born = d.birthday ? "Born " + d.birthday.slice(0, 4) + (d.place_of_birth ? " in " + d.place_of_birth : "") : "";
+    el("featSub").textContent = [born, bio].filter(Boolean).join(" • ");
+    var seen = {};
+    var films = ((d.movie_credits || {}).crew || []).filter(function (c) {          // only the films this person directed
+      if (c.job !== "Director" || !c.poster_path || seen[c.id]) { return false; }
+      seen[c.id] = true; return true;
+    }).sort(function (a, b) { return (b.vote_count || 0) - (a.vote_count || 0); }).slice(0, 24);
+    var grid = el("featGrid");
+    grid.replaceChildren();
+    if (films.length === 0) { featNote("No directed films found."); return; }
+    var heading = document.createElement("h3"); heading.style.width = "100%"; heading.textContent = "Directed by " + name;
+    grid.appendChild(heading);
+    films.forEach(function (m) { m.media_type = "movie"; grid.appendChild(makeCard(m)); });
+  } catch (error) {
+    console.error("Could not load director:", error);
+    if (token === featToken) { el("featSub").textContent = ""; featNote("Sorry, the films could not be loaded. Check your internet connection."); }
+  }
+}
+function openFeatItem(item) {
+  if (item.dataset.director) { openDirector(item.dataset.director); }
+  else if (item.dataset.flist) { openFeaturedList(item.dataset.flist); }
+}
+document.addEventListener("click", function (e) {
+  if (e.target.closest(".follow-btn")) { return; }                // the Follow button keeps its own job
+  var item = e.target.closest("[data-director], [data-flist]");
+  if (item) { openFeatItem(item); }
+});
+document.addEventListener("keydown", function (e) {
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("[data-director], [data-flist]")) { e.preventDefault(); openFeatItem(e.target); }
+});
+el("featClose").onclick = closeFeat;
+setupModal("featModal", closeFeat);
+el("featGrid").addEventListener("click", function (e) { if (e.target.closest(".card")) { closeFeat(); } });
+
+// ---------- Profile: photo, name and username ----------
+function paintAvatar(box, name, picture) {
+  box.style.backgroundImage = picture ? "url(" + picture + ")" : "none";
+  box.textContent = picture ? "" : (name || "?").charAt(0).toUpperCase();
+}
+function paintProfileInfo() {
+  el("pName").textContent = profileInfo.name;
+  el("pBio").textContent = (profileInfo.handle ? profileInfo.handle + " • " : "") + profileInfo.bio;
+  paintAvatar(el("pAvatar"), profileInfo.name, profileInfo.avatar);
+}
+paintProfileInfo();
+
+var avatarColumn = true;      // turns false if database-profile.sql has not been run yet
+async function dbProfiles(filter) {                 // reads people (with their picture when the database has that column)
+  var base = "profiles?" + filter + "&select=id,username,display_name";
+  if (avatarColumn) { try { return await db(base + ",avatar"); } catch (e) { avatarColumn = false; } }
+  return await db(base);
+}
+async function pullOwnProfile() {                   // online: bring your name, bio and picture to this device
+  var u = currentUser();
+  if (!CLOUD || !u) { return; }
+  var rows;
+  try { rows = await db("profiles?id=eq." + u.id + "&select=username,display_name,bio,avatar"); }
+  catch (e) { try { rows = await db("profiles?id=eq." + u.id + "&select=username,display_name,bio"); } catch (e2) { return; } }
+  if (!rows[0]) { return; }
+  profileInfo = { name: rows[0].display_name || u.username, handle: "@" + u.username, bio: rows[0].bio || "Film lover", avatar: rows[0].avatar || "" };
+  try { localStorage.setItem(userKey("filmlify_profile"), JSON.stringify(profileInfo)); } catch (e) {}
+  paintProfileInfo();
+}
+// when the username changes, move this account's saved lists and favorites to the new name
+function migrateLocalData(oldName, newName) {
+  var suffix = ":" + oldName;
+  Object.keys(localStorage).forEach(function (k) {
+    if (k.indexOf("filmlify_") === 0 && k.slice(-suffix.length) === suffix) {
+      localStorage.setItem(k.slice(0, -suffix.length) + ":" + newName, localStorage.getItem(k));
+      localStorage.removeItem(k);
+    }
+  });
+}
+function readPhoto(file) {                          // shrinks the chosen photo to a 256 x 256 square JPEG
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = function () {
+      var img = new Image();
+      img.onerror = function () { reject(new Error("bad image")); };
+      img.onload = function () {
+        var canvas = document.createElement("canvas"); canvas.width = canvas.height = 256;
+        var side = Math.min(img.width, img.height);
+        canvas.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 256, 256);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+var newAvatar;       // undefined = keep the picture, "" = remove it, or the new picture
+function paintEditAvatar() {
+  paintAvatar(el("epAvatar"), el("epName").value || profileInfo.name, newAvatar === undefined ? profileInfo.avatar : (newAvatar || ""));
+}
+el("editProfile").onclick = function () {
+  var u = currentUser();
+  if (!u) { requireLogin("edit your profile"); return; }
+  newAvatar = undefined;
+  el("epName").value = profileInfo.name;
+  el("epUser").value = u.username;
+  el("epBio").value = profileInfo.bio === "Film lover" ? "" : profileInfo.bio;
+  el("epError").textContent = "";
+  paintEditAvatar();
+  openModal("editProfileModal");
+};
+el("epPick").onclick = function () { el("epFile").click(); };
+el("epFile").onchange = async function () {
+  var file = this.files[0]; this.value = "";
+  if (!file) { return; }
+  if (!/^image\//.test(file.type)) { el("epError").textContent = "Please choose an image file."; return; }
+  try { newAvatar = await readPhoto(file); el("epError").textContent = ""; paintEditAvatar(); }
+  catch (e) { el("epError").textContent = "That picture could not be read. Try another one."; }
+};
+el("epRemove").onclick = function () { newAvatar = ""; paintEditAvatar(); };
+el("epName").oninput = paintEditAvatar;
+function closeEditProfile() { closeModal("editProfileModal"); }
+el("epCancel").onclick = closeEditProfile;
+setupModal("editProfileModal", closeEditProfile);
+el("epSave").onclick = async function () {
+  var btn = this, error = el("epError"), u = currentUser();
+  if (!u) { return; }
+  var name = el("epName").value.trim().replace(/\s+/g, " "), username = el("epUser").value.trim(), bio = el("epBio").value.trim();
+  if (name.length < 2) { error.textContent = "Please enter your full name."; return; }
+  if (CLOUD) {
+    username = username.toLowerCase();
+    if (!/^[a-z0-9_]{3,20}$/.test(username)) { error.textContent = "Username: 3-20 letters, numbers or _ only."; return; }
+  } else if (!/^[\w.\-]{3,30}$/.test(username)) { error.textContent = "Username must be 3-30 letters, numbers or . _ -"; return; }
+  btn.disabled = true; btn.textContent = "Saving...";
+  var oldName = u.username;
+  try {
+    if (CLOUD) {
+      if (username !== oldName && (await db("profiles?username=eq." + encodeURIComponent(username) + "&select=id")).length) { throw new Error("That username is already taken."); }
+      var patch = { username: username, display_name: name, bio: bio };
+      if (newAvatar !== undefined) { patch.avatar = newAvatar || null; }
+      await db("profiles?id=eq." + u.id, "PATCH", patch, { Prefer: "return=minimal" });
+      var session = cloudSession();
+      session.username = username; session.displayName = name; session.bio = bio;
+      localStorage.setItem("filmlify_cloud", JSON.stringify(session));
+    } else {
+      var list = accounts();
+      if (username.toLowerCase() !== oldName.toLowerCase() && list.some(function (a) { return a.username.toLowerCase() === username.toLowerCase(); })) { throw new Error("That username is already taken."); }
+      var account = list.find(function (a) { return a.username === oldName; });
+      account.username = username; account.displayName = name; account.bio = bio; account.handle = "@" + username;
+      localStorage.setItem("filmlify_accounts", JSON.stringify(list));
+      localStorage.setItem("filmlify_session", username);
+    }
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "Save changes";
+    error.textContent = /avatar/.test(e.message) ? "Run database-profile.sql in Supabase first (it adds profile pictures)." :
+                        /taken/.test(e.message) ? e.message : "Could not save. Please check your connection and try again.";
+    return;
+  }
+  if (username !== oldName) { migrateLocalData(oldName, username); }
+  profileInfo = { name: name, handle: "@" + username, bio: bio || "Film lover", avatar: newAvatar === undefined ? profileInfo.avatar : newAvatar };
+  try { localStorage.setItem(userKey("filmlify_profile"), JSON.stringify(profileInfo)); } catch (e) {}
+  sessionStorage.setItem("flash", "Profile updated!");
+  sessionStorage.setItem("goto", "#profile");
+  location.reload();                              // reload so the whole site shows the new name and picture
+};
+el("shareProfile").onclick = async function () {
+  var u = currentUser();
+  var text = "Check out my Filmlify profile: " + (u ? "@" + u.username : "guest"), link = location.href.split("#")[0];
+  try {
+    if (navigator.share) { await navigator.share({ title: "Filmlify", text: text, url: link }); }
+    else { await navigator.clipboard.writeText(text + " " + link); showMessage("Profile text copied!"); }
+  } catch (e) { /* the person closed the share sheet */ }
+};
+
+// ---------- People rows with pictures ----------
+function personRow(p) {
+  var row = document.createElement("div");
+  row.className = "item stat-person";
+  var pic = document.createElement("div");
+  pic.className = "mini-avatar";
+  paintAvatar(pic, p.display_name || p.username, p.avatar);
+  var text = document.createElement("span");
+  var nameLink = document.createElement("a");                // the name opens that person's profile (#user/ID)
+  nameLink.href = "#user/" + p.id;
+  nameLink.style.fontWeight = "bold";
+  nameLink.textContent = p.display_name || p.username;
+  var handleLink = document.createElement("a");
+  handleLink.href = "#user/" + p.id;
+  handleLink.style.color = "var(--muted)";
+  var handle = document.createElement("small");
+  handle.textContent = "@" + p.username;
+  handleLink.appendChild(handle);
+  pic.style.cursor = "pointer";
+  pic.onclick = function () { location.hash = "#user/" + p.id; };
+  text.appendChild(nameLink); text.appendChild(document.createElement("br")); text.appendChild(handleLink);
+  var button = document.createElement("button");
+  button.className = "btn small";
+  button.textContent = myFollowing.indexOf(p.id) >= 0 ? "Following ✓" : "Follow";
+  button.onclick = function (e) {
+    e.stopPropagation();                                      // do not also open the profile
+    toggleFollowUser(p.id, p.username);
+  };
+  row.appendChild(pic); row.appendChild(text); row.appendChild(button);
+  return row;
+}
+
+// ---------- Profile: click Followers / Following (and the other numbers) ----------
+var openStatKind = null, statToken = 0;
+function statNote(text) { var n = document.createElement("p"); n.className = "empty-note"; n.textContent = text; el("statsBody").replaceChildren(n); }
+async function renderStatModal() {
+  var kind = openStatKind, token = ++statToken;
+  if (!kind) { return; }
+  var body = el("statsBody"), people = [], stars = [];
+  el("statsTitle").textContent = kind === "followers" ? "Followers" : "Following";
+  if (CLOUD && currentUser()) {
+    body.replaceChildren(spinner());
+    try { people = await profilesByIds(kind === "followers" ? myFollowers : myFollowing); } catch (e) { console.error(e); }
+    if (token !== statToken) { return; }
+  }
+  if (kind === "following") { stars = getList("filmlify_following").slice().reverse(); }
+  el("statsTitle").textContent = (kind === "followers" ? "Followers" : "Following") + " (" + (people.length + stars.length) + ")";
+  if (people.length + stars.length === 0) {
+    statNote(kind === "followers" ? (CLOUD ? "No followers yet. People who follow you will show up here." : "Followers need the online database. Connect Supabase to let people follow each other.")
+                                  : "You are not following anyone yet. Use the People page, or the Follow buttons on the Home and Movies pages.");
+    return;
+  }
+  var box = document.createElement("div");
+  people.forEach(function (p) { box.appendChild(personRow(p)); });
+  stars.forEach(function (name) {                                  // movie stars and directors you follow
+    var row = document.createElement("div"); row.className = "item stat-person";
+    var pic = document.createElement("div"); pic.className = "mini-avatar"; pic.textContent = name.charAt(0).toUpperCase();
+    var text = document.createElement("span"); text.textContent = name;
+    var button = document.createElement("button"); button.className = "btn small"; button.textContent = "Unfollow";
+    button.onclick = function () {
+      saveList("filmlify_following", getList("filmlify_following").filter(function (n) { return n !== name; }));
+      paintFollowButtons(); renderProfile(); showMessage("You unfollowed " + name + ".");
+    };
+    row.appendChild(pic); row.appendChild(text); row.appendChild(button); box.appendChild(row);
+    searchPerson(name).then(function (p) { if (p && token === statToken) { pic.style.backgroundImage = "url(" + PROFILE_URL + p.profile_path + ")"; pic.textContent = ""; } });
+  });
+  body.replaceChildren(box);
+}
+function openStat(kind) {
+  openStatKind = kind;
+  openModal("statsModal");
+  if (CLOUD) { refreshFollowing(); }               // get the newest followers first (this redraws the list)
+  else { renderStatModal(); }
+}
+window.addEventListener("hashchange", function () { if (location.hash === "#profile") { refreshFollowing(); } });
+function closeStat() { openStatKind = null; statToken++; closeModal("statsModal"); }
+var updateStatsBase = updateStats;
+updateStats = function () { updateStatsBase(); if (openStatKind) { renderStatModal(); } };     // keep the open list fresh
+var STAT_CLICKS = {
+  statFollowers: function () { openStat("followers"); }, statFollowing: function () { openStat("following"); },
+  statWatched: function () { el("watchedRow").scrollIntoView({ behavior: "smooth", block: "center" }); },
+  statReviews: function () { el("reviewList").scrollIntoView({ behavior: "smooth", block: "center" }); },
+  statWatchlist: function () { el("watchlistRow").scrollIntoView({ behavior: "smooth", block: "center" }); }
+};
+Object.keys(STAT_CLICKS).forEach(function (id) {
+  var cell = el(id).parentElement;
+  cell.classList.add("stat-link"); cell.setAttribute("role", "button"); cell.tabIndex = 0;
+  cell.onclick = STAT_CLICKS[id];
+  cell.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); STAT_CLICKS[id](); } };
+});
+el("statsClose").onclick = closeStat;
+setupModal("statsModal", closeStat);
+
+// ---------- Profile: favorites with edit / remove / add-by-search ----------
+function fillFavorites(rowId, type) {
+  var row = el(rowId), kind = type === "movie" ? "movie" : "tv", word = type === "movie" ? "film" : "TV show";
+  row.replaceChildren();
+  var favs = getList("filmlify_favorites").filter(function (f) { return f.media_type === type && f.poster_path; }).slice(0, 5);
+  function key(f) { return f.media_type + "-" + f.id; }
+  favs.forEach(function (m) {
+    var card = makeCard(m), tools = document.createElement("div");
+    tools.className = "tools";
+    tools.appendChild(toolButton("✏️", "Change this title", async function () {                // change
+      var found = await askTitle("Change this favorite " + word, nameOf(m), kind);
+      if (!found) { return; }
+      var all = getList("filmlify_favorites");
+      if (all.some(function (f) { return key(f) === key(found) && key(f) !== key(m); })) { showMessage("That title is already in your favorites.", "error"); return; }
+      all = all.map(function (f) { return key(f) === key(m) ? slim(found) : f; });
+      saveList("filmlify_favorites", all);
+      cloudListRemove("favorites", key(m)); cloudListAdd("favorites", found);          // keep the online copy in step
+      renderProfile();
+    }));
+    tools.appendChild(toolButton("✕", "Remove from favorites", function () {                  // remove
+      if (!confirm("Remove " + nameOf(m) + " from your favorites?")) { return; }
+      saveList("filmlify_favorites", getList("filmlify_favorites").filter(function (f) { return key(f) !== key(m); }));
+      cloudListRemove("favorites", key(m));
+      renderProfile();
+    }));
+    card.appendChild(tools);
+    row.appendChild(card);
+  });
+  for (var i = favs.length; i < 5; i++) {                                                      // add: empty "+" slots
+    var slot = document.createElement("div"); slot.className = "slot";
+    var box = document.createElement("div"); box.className = "slot-poster"; box.textContent = "+"; box.title = "Add a favorite " + word;
+    box.onclick = async function () {
+      if (!requireLogin("save favorites")) { return; }
+      var found = await askTitle("Add a favorite " + word, "", kind);
+      if (!found) { return; }
+      var all = getList("filmlify_favorites");
+      if (all.some(function (f) { return key(f) === key(found); })) { showMessage("That title is already in your favorites.", "error"); return; }
+      all.push(slim(found)); saveList("filmlify_favorites", all);
+      cloudListAdd("favorites", found);
+      renderProfile();
+      showMessage("Added to your favorites!");
+    };
+    slot.appendChild(box); row.appendChild(slot);
+  }
+  if (row.updateArrows) { row.updateArrows(); }
+}
+function toolButton(symbol, tip, action) {          // small ✏️ / ✕ button on top of a poster
+  var b = document.createElement("button"); b.className = "tool"; b.textContent = symbol; b.title = tip;
+  b.onclick = function (e) { e.stopPropagation(); action(); };
+  return b;
+}
+el("addWatchTitle").onclick = async function () {   // add to the watchlist by searching for a title
+  if (!requireLogin("use your watchlist")) { return; }
+  var found = await askTitle("Which movie or show do you want to add to your watchlist?");
+  if (!found) { return; }
+  if (getList("filmlify_watchlist").some(function (w) { return w.key === found.media_type + "-" + found.id; })) { showMessage("That title is already in your watchlist.", "error"); return; }
+  toggleWatchlist(found);
+};
+renderProfile();
+
+// ---------- Profile: custom lists (open, add by search, rename, delete) ----------
+var openListId = null, listToken = 0;
+function renderCustomLists() {
+  var box = el("customLists");
+  box.replaceChildren();
+  var lists = getList("filmlify_customlists");
+  if (lists.length === 0) { box.textContent = "No lists yet. Create one below."; }
+  lists.forEach(function (l) {
+    var row = document.createElement("div"); row.className = "item clickable";
+    var info = document.createElement("span");
+    var name = document.createElement("b"); name.textContent = l.name + " (" + l.items.length + ")";
+    info.appendChild(name);
+    if (l.items.length) {
+      var titles = document.createElement("small"); titles.textContent = l.items.map(function (i) { return i.title; }).join(", ");
+      info.appendChild(document.createElement("br")); info.appendChild(titles);
+    }
+    info.title = "Open this list";
+    info.onclick = function () { openCustomList(l.id); };
+    function button(label, tip, action) {
+      var b = document.createElement("button"); b.className = "btn small"; b.textContent = label; b.title = tip;
+      b.onclick = function (e) { e.stopPropagation(); action(); };
+      return b;
+    }
+    row.appendChild(info);
+    row.appendChild(button("+ Add", "Add a movie or TV show", function () { addToCustomList(l.id); }));
+    row.appendChild(button("Edit", "Rename list", function () {
+      var fresh = (prompt("New name for this list:", l.name) || "").trim();
+      if (!fresh) { return; }
+      var all = getList("filmlify_customlists");
+      all.forEach(function (x) { if (x.id === l.id) { x.name = fresh; } });
+      saveList("filmlify_customlists", all); renderCustomLists(); paintListSelect();
+    }));
+    row.appendChild(button("✕", "Delete list", function () {
+      if (!confirm("Delete the list \"" + l.name + "\"?")) { return; }
+      saveList("filmlify_customlists", getList("filmlify_customlists").filter(function (x) { return x.id !== l.id; }));
+      renderCustomLists(); paintListSelect();
+    }));
+    box.appendChild(row);
+  });
+}
+async function addToCustomList(listId) {
+  if (!requireLogin("use your lists")) { return; }
+  var lists = getList("filmlify_customlists"), list = lists.find(function (x) { return x.id === listId; });
+  if (!list) { return; }
+  var found = await askTitle("Add to \"" + list.name + "\"");
+  if (!found) { return; }
+  var key = found.media_type + "-" + found.id;
+  if (list.items.some(function (i) { return i.key === key; })) { showMessage("That title is already in this list.", "error"); return; }
+  list.items.push({ key: key, title: nameOf(found) });
+  saveList("filmlify_customlists", lists);
+  renderCustomLists();
+  if (openListId === listId) { renderListModal(); }
+  showMessage("Added to " + list.name + "!");
+}
+function openCustomList(listId) { openListId = listId; renderListModal(); openModal("clModal"); }
+async function renderListModal() {
+  var list = getList("filmlify_customlists").find(function (x) { return x.id === openListId; }), token = ++listToken;
+  if (!list) { closeModal("clModal"); return; }
+  el("clTitle").textContent = list.name + " (" + list.items.length + ")";
+  var grid = el("clGrid");
+  if (list.items.length === 0) { var note = document.createElement("p"); note.className = "empty-note"; note.textContent = "This list is empty. Add a movie or TV show below."; grid.replaceChildren(note); return; }
+  grid.replaceChildren(spinner());
+  var movies = await Promise.all(list.items.map(function (i) { return itemByKey(i.key); }));
+  if (token !== listToken) { return; }
+  grid.replaceChildren();
+  list.items.forEach(function (item, i) {
+    if (!movies[i]) { return; }
+    var card = makeCard(movies[i]), tools = document.createElement("div");
+    tools.className = "tools";
+    tools.appendChild(toolButton("✕", "Remove from this list", function () {
+      var all = getList("filmlify_customlists");
+      all.forEach(function (x) { if (x.id === list.id) { x.items = x.items.filter(function (it) { return it.key !== item.key; }); } });
+      saveList("filmlify_customlists", all); renderListModal(); renderCustomLists();
+    }));
+    card.appendChild(tools); grid.appendChild(card);
+  });
+}
+function closeCustomList() { openListId = null; listToken++; closeModal("clModal"); }
+el("clAdd").onclick = function () { addToCustomList(openListId); };
+el("clClose").onclick = closeCustomList;
+setupModal("clModal", closeCustomList);
+el("clGrid").addEventListener("click", function (e) { if (e.target.closest(".card") && !e.target.closest(".tools")) { closeCustomList(); } });
+renderCustomLists();
+
+// ---------- Edit a review (pop-up with stars and words) ----------
+var editingReviewId = null, editStars = 0, ratingWords = ["", "Poor", "Fair", "Good", "Great", "Masterpiece"];
+for (var starValue = 1; starValue <= 5; starValue++) {
+  var starButton = document.createElement("button");
+  starButton.type = "button"; starButton.className = "er-star"; starButton.dataset.value = starValue; starButton.textContent = "★";
+  starButton.setAttribute("role", "radio"); starButton.setAttribute("aria-label", starValue + (starValue === 1 ? " star" : " stars"));
+  starButton.onclick = function () { editStars = Number(this.dataset.value); paintEditStars(); el("erError").textContent = ""; };
+  el("erStars").appendChild(starButton);
+}
+function paintEditStars() {
+  document.querySelectorAll("#erStars .er-star").forEach(function (b) {
+    b.classList.toggle("on", Number(b.dataset.value) <= editStars);
+    b.setAttribute("aria-checked", Number(b.dataset.value) === editStars ? "true" : "false");
+  });
+  el("erStarsText").textContent = editStars ? editStars + " of 5 • " + ratingWords[editStars] : "Pick a rating";
+}
+function openEditReview(r) {
+  editingReviewId = r.id; editStars = r.stars;
+  el("erTitle").textContent = r.title || "";
+  el("erText").value = r.text || ""; el("erError").textContent = "";
+  paintEditStars(); openModal("editReviewModal"); el("erText").focus();
+}
+function closeEditReview() { editingReviewId = null; closeModal("editReviewModal"); }
+el("erSave").onclick = function () {
+  if (editStars < 1 || editStars > 5) { el("erError").textContent = "Please pick a star rating from 1 to 5."; return; }
+  var all = getList("filmlify_reviews"), changed = null;
+  all.forEach(function (x) { if (x.id === editingReviewId) { x.stars = editStars; x.text = el("erText").value.trim(); changed = x; } });
+  saveList("filmlify_reviews", all);
+  if (changed) { cloudSaveReview(changed); }                       // update the online copy too
+  closeEditReview(); renderProfile();
+  if (current) { paintReviews(); }
+  showMessage("Review updated.");
+};
+el("erCancel").onclick = closeEditReview;
+setupModal("editReviewModal", closeEditReview);
+
+
+/* ============ 29. USER PROFILES (CLICKABLE FROM FOLLOWERS/FOLLOWING) ============ */
 async function loadUserProfile(userId) {
   if (!CLOUD) { showMessage("Profiles need the online database."); return; }
 
   // 1. Public profile info
   var profile;
   try {
-    var rows = await db("profiles?id=eq." + userId + "&select=id,username,display_name,bio");
+    var rows = await dbProfiles("id=eq." + userId);          // name, username and picture
     profile = rows[0];
+    try { var more = await db("profiles?id=eq." + userId + "&select=bio"); profile.bio = more[0] && more[0].bio; } catch (e) {}
   } catch (e) { console.error(e); }
   
   if (!profile) {
@@ -2424,7 +3068,7 @@ async function loadUserProfile(userId) {
   document.getElementById("uName").textContent   = profile.display_name || profile.username;
   document.getElementById("uHandle").textContent = "@" + profile.username;
   document.getElementById("uBio").textContent    = profile.bio || "";
-  document.getElementById("uAvatar").textContent = (profile.display_name || profile.username).charAt(0).toUpperCase();
+  paintAvatar(document.getElementById("uAvatar"), profile.display_name || profile.username, profile.avatar);
 
   // 2. Follow button + counts
   await refreshFollowing();                          
@@ -2536,7 +3180,7 @@ if (backBtn) {
   backBtn.onclick = function () { location.hash = "#people"; };
 }
 
-/* ============ 28. HELP CENTER: SEARCH AND TOPIC SHORTCUTS ============ */
+/* ============ 30. HELP CENTER: SEARCH AND TOPIC SHORTCUTS ============ */
 (function () {
   var box = document.getElementById("helpSearch");
   if (!box) { return; }
@@ -2564,3 +3208,7 @@ if (backBtn) {
     if (target) { target.scrollIntoView({ behavior: "smooth", block: "start" }); }
   });
 })();
+
+
+// Opening somebody's profile from the Followers / Following pop-up closes the pop-up
+window.addEventListener("hashchange", function () { if (location.hash.indexOf("#user/") === 0) { closeStat(); } });

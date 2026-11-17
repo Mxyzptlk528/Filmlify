@@ -73,9 +73,9 @@
       </div>
     </section>
     <section class="block"><h2>Lists For You</h2><div class="box">
-      <div class="item"><span>Masterpiece Crime Drama</span><small>28 Films</small></div>
-      <div class="item"><span>Psychological Thrillers with Plot Twists</span><small>15 Films</small></div>
-      <div class="item"><span>Essential Sci-fi Cinema</span><small>12 Films</small></div>
+      <div class="item list-link clickable" data-list="crime" role="button" tabindex="0" title="See the films"><span>Masterpiece Crime Drama</span><small>28 Films</small></div>
+      <div class="item list-link clickable" data-list="thriller" role="button" tabindex="0" title="See the films"><span>Psychological Thrillers with Plot Twists</span><small>15 Films</small></div>
+      <div class="item list-link clickable" data-list="scifi" role="button" tabindex="0" title="See the films"><span>Essential Sci-fi Cinema</span><small>12 Films</small></div>
     </div></section>
   </div>
 
@@ -151,14 +151,14 @@
 
   <div class="two">
     <section class="block"><h2>Popular Directors</h2><div class="box">
-      <div class="item with-pic"><div class="pic tall" data-person="Denis Villeneuve"></div><p><b>Denis Villeneuve</b><br><small>Prisoners, Dune, Arrival</small></p><button class="btn small follow-btn" data-name="Denis Villeneuve">Follow</button></div>
-      <div class="item with-pic"><div class="pic tall" data-person="Christopher Nolan"></div><p><b>Christopher Nolan</b><br><small>Oppenheimer, Inception, Dark Knight</small></p><button class="btn small follow-btn" data-name="Christopher Nolan">Follow</button></div>
-      <div class="item with-pic"><div class="pic tall" data-person="Stanley Kubrick"></div><p><b>Stanley Kubrick</b><br><small>2001: A Space Odyssey, The Shining</small></p><button class="btn small follow-btn" data-name="Stanley Kubrick">Follow</button></div>
+      <div class="item with-pic clickable" data-director="Denis Villeneuve" role="button" tabindex="0" title="See Denis Villeneuve's films"><div class="pic tall" data-person="Denis Villeneuve"></div><p><b>Denis Villeneuve</b><br><small>Prisoners, Dune, Arrival</small></p><button class="btn small follow-btn" data-name="Denis Villeneuve">Follow</button></div>
+      <div class="item with-pic clickable" data-director="Christopher Nolan" role="button" tabindex="0" title="See Christopher Nolan's films"><div class="pic tall" data-person="Christopher Nolan"></div><p><b>Christopher Nolan</b><br><small>Oppenheimer, Inception, Dark Knight</small></p><button class="btn small follow-btn" data-name="Christopher Nolan">Follow</button></div>
+      <div class="item with-pic clickable" data-director="Stanley Kubrick" role="button" tabindex="0" title="See Stanley Kubrick's films"><div class="pic tall" data-person="Stanley Kubrick"></div><p><b>Stanley Kubrick</b><br><small>2001: A Space Odyssey, The Shining</small></p><button class="btn small follow-btn" data-name="Stanley Kubrick">Follow</button></div>
     </div></section>
     <section class="block"><h2>Featured Movie Lists</h2><div class="box">
-      <div class="item"><span>Dark Thrillers &amp; Mystery Masterpiece</span><small>27 Films</small></div>
-      <div class="item"><span>Complete MCU Infinity Saga</span><small>23 Films</small></div>
-      <div class="item"><span>Neo-Noir Cinema Essential</span><small>30 Films</small></div>
+      <div class="item clickable" data-flist="thrillers" role="button" tabindex="0"><span>Dark Thrillers &amp; Mystery Masterpiece</span><small>27 Films</small></div>
+      <div class="item clickable" data-flist="mcu" role="button" tabindex="0"><span>Complete MCU Infinity Saga</span><small>23 Films</small></div>
+      <div class="item clickable" data-flist="noir" role="button" tabindex="0"><span>Neo-Noir Cinema Essential</span><small>30 Films</small></div>
     </div></section>
   </div>
 </div>
@@ -166,12 +166,18 @@
 <!-- ===================== TV SHOWS PAGE ===================== -->
 <div class="page" id="tv">
   <section class="block"><h2>Top 10 TV Shows</h2>
-    <div class="hero" data-title="Breaking Bad">
-      <h1>#1 Breaking Bad</h1>
-      <p>Created by Vince Gilligan</p>
-      <p>TV-MA • Crime, Drama • 5 Seasons • 2008-2013</p>
-      <p>A high school chemistry teacher diagnosed with terminal lung cancer turns to manufacturing and selling methamphetamine.</p>
-      <div><button class="btn add">Add to List</button> <button class="btn outline">More Info</button></div>
+    <div class="hero top10" id="top10">
+      <div class="t10-bg" id="t10BgA"></div><div class="t10-bg" id="t10BgB"></div>
+      <div class="top10-text" id="t10Text">
+        <h1 id="t10Title">Loading Top 10...</h1>
+        <p id="t10By"></p>
+        <p id="t10Meta"></p>
+        <p id="t10Story"></p>
+        <div><button class="btn" id="t10Add">Add to List</button> <button class="btn outline" id="t10More">More Info</button></div>
+      </div>
+      <button class="t10-arrow prev" id="t10Prev" aria-label="Previous show">‹</button>
+      <button class="t10-arrow next" id="t10Next" aria-label="Next show">›</button>
+      <div class="t10-dots" id="t10Dots"></div>
     </div>
   </section>
 
@@ -224,12 +230,12 @@
   </section>
 
   <section class="block"><h2>Filmlify Community Top Lists</h2><div class="three">
-    <div class="box"><small>Essential Drama ♥ 14.2k</small><h3>Shows with Perfect Series Finales</h3><small>by @wembaby • 12 Shows</small></div>
-    <div class="box"><small>Suspense ♥ 9.8k</small><h3>Mind-Bending Mystery &amp; Thrillers</h3><small>by @tyresehaliburnout • 15 Shows</small></div>
-    <div class="box"><small>Futuristic ♥ 4.8k</small><h3>Best Sci-Fi Worldbuilding</h3><small>by @lebwrongsend • 19 Shows</small></div>
-    <div class="box"><small>Masterpieces ♥ 3.2k</small><h3>Dark &amp; Gritty Crime Sagas</h3><small>by @kyrieyearning • 20 Shows</small></div>
-    <div class="box"><small>Anime &amp; Animation ♥ 16.6k</small><h3>Top-Tier Animated Sagas</h3><small>by @oganobatayo • 18 Shows</small></div>
-    <div class="box"><small>Limited Series ♥ 11.2k</small><h3>Peak TV Miniseries Masterpieces</h3><small>by @austinrebound • 10 Shows</small></div>
+    <div class="box tv-list" data-tvlist="finales" role="button" tabindex="0"><small>Essential Drama ♥ 14.2k</small><h3>Shows with Perfect Series Finales</h3><small>by @wembaby • 12 Shows</small></div>
+    <div class="box tv-list" data-tvlist="mystery" role="button" tabindex="0"><small>Suspense ♥ 9.8k</small><h3>Mind-Bending Mystery &amp; Thrillers</h3><small>by @tyresehaliburnout • 15 Shows</small></div>
+    <div class="box tv-list" data-tvlist="scifi" role="button" tabindex="0"><small>Futuristic ♥ 4.8k</small><h3>Best Sci-Fi Worldbuilding</h3><small>by @lebwrongsend • 19 Shows</small></div>
+    <div class="box tv-list" data-tvlist="crime" role="button" tabindex="0"><small>Masterpieces ♥ 3.2k</small><h3>Dark &amp; Gritty Crime Sagas</h3><small>by @kyrieyearning • 20 Shows</small></div>
+    <div class="box tv-list" data-tvlist="animated" role="button" tabindex="0"><small>Anime &amp; Animation ♥ 16.6k</small><h3>Top-Tier Animated Sagas</h3><small>by @oganobatayo • 18 Shows</small></div>
+    <div class="box tv-list" data-tvlist="miniseries" role="button" tabindex="0"><small>Limited Series ♥ 11.2k</small><h3>Peak TV Miniseries Masterpieces</h3><small>by @austinrebound • 10 Shows</small></div>
   </div></section>
 </div>
 
@@ -307,7 +313,8 @@
     <div>
       <h1 id="pName">Victor Wenbamamahalin</h1>                 <!-- your name -->
       <p><small id="pBio">@wembaby • Film Enthusiast &amp; Reviewer</small></p>
-      <button class="btn small" id="editProfile">Edit Profile</button>   <!-- your handle and bio -->
+      <button class="btn small" id="editProfile">Edit Profile</button>
+      <button class="btn small" id="shareProfile">Share Profile</button>   <!-- your handle and bio -->
     </div>
     <div class="stats">                              <!-- these numbers count up by themselves (see script.js) -->
       <div><b id="statFollowers">0</b>Followers</div><div><b id="statFollowing">0</b>Following</div><div><b id="statWatched">0</b>Watched</div>
@@ -318,11 +325,11 @@
   <div class="two">
     <div>
       <section class="block"><h2>Favorite Films</h2>
-        <p><small>Open any film and press "Add to Favorites" (up to 5).</small></p>
+        <p><small>Tap + to search for a film, or open any film and press "Add to Favorites" (up to 5).</small></p>
         <div class="row" id="favFilms"></div>   <!-- your own favorites appear here -->
       </section>
       <section class="block"><h2>Favorite TV Shows</h2>
-        <p><small>Open any show and press "Add to Favorites" (up to 5).</small></p>
+        <p><small>Tap + to search for a show, or open any show and press "Add to Favorites" (up to 5).</small></p>
         <div class="row" id="favShows"></div>   <!-- your own favorites appear here -->
       </section>
       <section class="block"><h2>Recent Reviews</h2>
@@ -341,7 +348,7 @@
     </div>
   </div>
   <!-- Dedicated sections: saved movies and watched movies -->
-  <section class="block"><h2>Watchlist <small id="wlCount"></small></h2>
+  <section class="block"><h2>Watchlist <small id="wlCount"></small> <button class="btn small" id="addWatchTitle">+ Add title</button></h2>
     <div class="row" id="watchlistRow"></div>
   </section>
   <section class="block"><h2>Watched <small id="wdCount"></small></h2>
@@ -488,7 +495,7 @@
     </div>
     <div>
       <p style="text-align:right; margin-bottom:10px"><span id="switchText">Don't have an account?</span> <a href="#login" id="switchLink" style="color:var(--accent)">Sign Up</a></p>
-      <form class="box" id="loginForm">
+      <form class="box" id="loginForm" novalidate>
         <h1 id="formTitle">Welcome to Filmlify</h1>
         <p>Sign in to continue to Filmlify</p>
         <p><small>You can browse freely. An account is needed to review, like, follow or keep lists.</small></p>
@@ -562,6 +569,81 @@
     <div id="mReviews"></div>
   </div>
 </div>
+
+<!-- ===================== LIST POP-UP (Home lists and TV community lists) ===================== -->
+<div class="modal" id="listModal"><div class="modal-box">
+  <h2 id="listTitle"></h2>
+  <div class="row wrap" id="listGrid"></div>
+  <button class="btn outline wide" id="listClose" type="button">Close</button>
+</div></div>
+
+<!-- ===================== DIRECTOR / FEATURED LIST POP-UP ===================== -->
+<div class="modal" id="featModal"><div class="modal-box">
+  <div class="feat-head">
+    <div class="feat-photo" id="featPhoto" hidden></div>
+    <div><h2 id="featTitle"></h2><p id="featSub"></p></div>
+  </div>
+  <div class="row wrap" id="featGrid"></div>
+  <button class="btn outline wide" id="featClose" type="button">Close</button>
+</div></div>
+
+<!-- ===================== EDIT PROFILE POP-UP ===================== -->
+<div class="modal" id="editProfileModal"><div class="modal-box">
+  <h2>Edit Profile</h2>
+  <div class="ep-photo">
+    <div class="avatar" id="epAvatar"></div>
+    <div>
+      <button class="btn" id="epPick" type="button">Change photo</button>
+      <button class="btn outline" id="epRemove" type="button">Remove photo</button>
+      <br><small>JPG or PNG. It is cropped to a square.</small>
+      <input type="file" id="epFile" accept="image/*" hidden>
+    </div>
+  </div>
+  <label for="epName">Full name</label>
+  <input type="text" id="epName" maxlength="60" autocomplete="name">
+  <label for="epUser">Username</label>
+  <input type="text" id="epUser" maxlength="30" autocomplete="off">
+  <label for="epBio">Bio</label>
+  <input type="text" id="epBio" maxlength="60" placeholder="Film Enthusiast" autocomplete="off">
+  <div class="error" id="epError"></div>
+  <button class="btn wide" id="epSave" type="button">Save changes</button>
+  <button class="btn outline wide" id="epCancel" type="button">Cancel</button>
+</div></div>
+
+<!-- ===================== CUSTOM LIST POP-UP ===================== -->
+<div class="modal" id="clModal"><div class="modal-box">
+  <h2 id="clTitle"></h2>
+  <div class="row wrap" id="clGrid"></div>
+  <button class="btn wide" id="clAdd" type="button">+ Add movie or TV show</button>
+  <button class="btn outline wide" id="clClose" type="button">Close</button>
+</div></div>
+
+<!-- ===================== TITLE PICKER POP-UP (search and choose a movie or show) ===================== -->
+<div class="modal" id="pickModal"><div class="modal-box">
+  <h2 id="pickTitle">Add a title</h2>
+  <input type="search" id="pickInput" placeholder="Search movies or TV shows..." autocomplete="off">
+  <div id="pickResults"></div>
+  <button class="btn outline wide" id="pickCancel" type="button">Cancel</button>
+</div></div>
+
+<!-- ===================== FOLLOWERS / FOLLOWING POP-UP ===================== -->
+<div class="modal" id="statsModal"><div class="modal-box">
+  <h2 id="statsTitle"></h2>
+  <div id="statsBody"></div>
+  <button class="btn outline wide" id="statsClose" type="button">Close</button>
+</div></div>
+
+<!-- ===================== EDIT REVIEW POP-UP ===================== -->
+<div class="modal" id="editReviewModal"><div class="modal-box">
+  <h2>Edit review</h2><p id="erTitle"></p>
+  <label>Your rating</label>
+  <div id="erStars" role="radiogroup" aria-label="Rating"></div><small id="erStarsText"></small>
+  <label for="erText">Your review <small>(optional)</small></label>
+  <textarea id="erText" maxlength="1000" placeholder="What did you think?"></textarea>
+  <div class="error" id="erError"></div>
+  <button class="btn wide" id="erSave" type="button">Save changes</button>
+  <button class="btn outline wide" id="erCancel" type="button">Cancel</button>
+</div></div>
 
 <!-- ===================== PAYMENT POP-UP ===================== -->
 <div class="modal" id="payModal"><div class="modal-box">
