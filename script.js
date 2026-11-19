@@ -864,38 +864,6 @@ async function loadIcons() {
 }
 
 // Trending People: replace the typed names with this week's trending people from TMDB
-async function fillPeople() {
-  var row = document.getElementById("peopleRow");
-  try {
-    var response = await fetch(TMDB_URL + "/trending/person/week?api_key=" + TMDB_KEY);
-    if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
-    var data = await response.json();
-    var people = (data.results || []).filter(function (p) { return p.profile_path; }).slice(0, 12);
-    if (people.length === 0) { return; }
-    row.replaceChildren();
-    people.forEach(function (p) {
-      var box = document.createElement("div");
-      box.className = "person";
-      var pic = document.createElement("div");
-      pic.className = "pic round has-image";
-      pic.style.backgroundImage = "url(" + PROFILE_URL + p.profile_path + ")";
-      var name = document.createElement("div");
-      name.textContent = p.name;
-      var follow = document.createElement("button");
-      follow.className = "btn small follow-btn";
-      follow.dataset.name = p.name;
-      box.appendChild(pic);
-      box.appendChild(name);
-      box.appendChild(follow);
-      row.appendChild(box);
-    });
-    row.scrollLeft = 0;
-    paintFollowButtons();
-  } catch (error) {
-    console.error("Could not load trending people:", error);
-  }
-}
-
 
 /* ============ 12. PROFILE NUMBERS, WATCHED, FOLLOW AND FAVORITE GENRES ============ */
 // TMDB sends genres as numbers. This list turns them into names.
@@ -1893,13 +1861,18 @@ function listRow(m) {
   return { tmdb_key: m.media_type + "-" + m.id, media_type: m.media_type, tmdb_id: m.id,
            title: nameOf(m), poster: m.poster_path || "", year: yearOf(m) };
 }
-function cloudListAdd(table, m) {
+function pushRow(table, m) {                         // saves one title online. Gives back true or false
   var u = currentUser();
-  if (!CLOUD || !u) { return; }
+  if (!CLOUD || !u) { return Promise.resolve(false); }
   var row = listRow(m);
   row.user_id = u.id;
-  db(table + "?on_conflict=user_id,tmdb_key", "POST", row, { Prefer: "resolution=ignore-duplicates,return=minimal" })
-    .catch(function (e) { console.error(e); showMessage("Could not save to the database.", "error"); });
+  return db(table + "?on_conflict=user_id,tmdb_key", "POST", row, { Prefer: "resolution=ignore-duplicates,return=minimal" })
+    .then(function () { return true; })
+    .catch(function (e) { console.error(e); return false; });
+}
+function cloudListAdd(table, m) {
+  if (!CLOUD || !currentUser()) { return; }
+  pushRow(table, m).then(function (saved) { if (!saved) { showMessage("Could not save to the database.", "error"); } });
 }
 function cloudListRemove(table, key) {
   var u = currentUser();
@@ -1922,9 +1895,27 @@ async function syncFromCloud() {
     var fv = await db("favorites?user_id=eq." + u.id + "&select=*&order=created_at.desc");   // ← NEW
     var rv = await db("reviews?user_id=eq." + u.id + "&select=*&order=created_at.asc");
     var old = getList("filmlify_reviews");
-    saveList("filmlify_watchlist", wl.map(fromRow));
-    saveList("filmlify_watched",   wd.map(fromRow));
-    saveList("filmlify_favorites", fv.map(fromRow));            // ← NEW
+    // First time on this browser: anything saved only here (before online saving existed) is uploaded,
+    // so other people can see it. Afterwards the database is the master copy.
+    var flagKey = "filmlify_uploaded:" + u.username, firstRun = !localStorage.getItem(flagKey), uploadFailed = false;
+    async function mergeWithLocal(listName, table, rows) {
+      var fromCloud = rows.map(fromRow);
+      if (!firstRun) { return fromCloud; }
+      var have = {};
+      fromCloud.forEach(function (x) { have[x.key] = true; });
+      var extra = getList(listName).filter(function (x) {
+        var k = x.key || (x.media_type + "-" + x.id);
+        x.key = k;
+        return x.id && x.media_type && !have[k];
+      });
+      var results = await Promise.all(extra.map(function (x) { return pushRow(table, x); }));
+      if (results.indexOf(false) >= 0) { uploadFailed = true; }
+      return fromCloud.concat(extra);
+    }
+    saveList("filmlify_watchlist", await mergeWithLocal("filmlify_watchlist", "watchlist", wl));
+    saveList("filmlify_watched",   await mergeWithLocal("filmlify_watched", "watched", wd));
+    saveList("filmlify_favorites", await mergeWithLocal("filmlify_favorites", "favorites", fv));
+    if (firstRun && !uploadFailed) { localStorage.setItem(flagKey, "1"); }
     saveList("filmlify_reviews", rv.map(function (r) {
       var o = old.find(function (x) { return x.key === r.tmdb_key; }) || {};
       return { id: r.local_id || r.id, key: r.tmdb_key, title: r.title, poster: r.poster || "", genres: o.genres,
@@ -2807,21 +2798,31 @@ function personRow(p) {
 }
 
 // ---------- Profile: click Followers / Following (and the other numbers) ----------
-var openStatKind = null, statToken = 0;
+var openStatKind = null, statToken = 0, statUser = null;      // statUser = whose lists (null = yours)
 function statNote(text) { var n = document.createElement("p"); n.className = "empty-note"; n.textContent = text; el("statsBody").replaceChildren(n); }
 async function renderStatModal() {
   var kind = openStatKind, token = ++statToken;
   if (!kind) { return; }
   var body = el("statsBody"), people = [], stars = [];
-  el("statsTitle").textContent = kind === "followers" ? "Followers" : "Following";
-  if (CLOUD && currentUser()) {
+  var owner = statUser ? statUser.name + "'s " : "";
+  el("statsTitle").textContent = owner + (kind === "followers" ? "Followers" : "Following");
+  if (CLOUD && (statUser || currentUser())) {
     body.replaceChildren(spinner());
-    try { people = await profilesByIds(kind === "followers" ? myFollowers : myFollowing); } catch (e) { console.error(e); }
+    try {
+      var ids = myFollowers;
+      if (statUser) {                                  // somebody else: ask the database about THEIR follows
+        var rows = kind === "followers" ? await db("follows?following=eq." + statUser.id + "&select=follower")
+                                        : await db("follows?follower=eq." + statUser.id + "&select=following");
+        ids = rows.map(function (r) { return kind === "followers" ? r.follower : r.following; });
+      } else if (kind === "following") { ids = myFollowing; }
+      people = await profilesByIds(ids);
+    } catch (e) { console.error(e); }
     if (token !== statToken) { return; }
   }
-  if (kind === "following") { stars = getList("filmlify_following").slice().reverse(); }
-  el("statsTitle").textContent = (kind === "followers" ? "Followers" : "Following") + " (" + (people.length + stars.length) + ")";
+  if (kind === "following" && !statUser) { stars = getList("filmlify_following").slice().reverse(); }
+  el("statsTitle").textContent = owner + (kind === "followers" ? "Followers" : "Following") + " (" + (people.length + stars.length) + ")";
   if (people.length + stars.length === 0) {
+    if (statUser) { statNote(kind === "followers" ? "Nobody follows " + statUser.name + " yet." : statUser.name + " is not following anyone yet."); return; }
     statNote(kind === "followers" ? (CLOUD ? "No followers yet. People who follow you will show up here." : "Followers need the online database. Connect Supabase to let people follow each other.")
                                   : "You are not following anyone yet. Use the People page, or the Follow buttons on the Home and Movies pages.");
     return;
@@ -2843,13 +2844,14 @@ async function renderStatModal() {
   body.replaceChildren(box);
 }
 function openStat(kind) {
+  statUser = null;
   openStatKind = kind;
   openModal("statsModal");
   if (CLOUD) { refreshFollowing(); }               // get the newest followers first (this redraws the list)
   else { renderStatModal(); }
 }
 window.addEventListener("hashchange", function () { if (location.hash === "#profile") { refreshFollowing(); } });
-function closeStat() { openStatKind = null; statToken++; closeModal("statsModal"); }
+function closeStat() { openStatKind = null; statUser = null; statToken++; closeModal("statsModal"); }
 var updateStatsBase = updateStats;
 updateStats = function () { updateStatsBase(); if (openStatKind) { renderStatModal(); } };     // keep the open list fresh
 var STAT_CLICKS = {
@@ -3065,6 +3067,7 @@ async function loadUserProfile(userId) {
     return;
   }
 
+  viewedUser = { id: userId, name: profile.display_name || profile.username };
   document.getElementById("uName").textContent   = profile.display_name || profile.username;
   document.getElementById("uHandle").textContent = "@" + profile.username;
   document.getElementById("uBio").textContent    = profile.bio || "";
@@ -3212,3 +3215,121 @@ if (backBtn) {
 
 // Opening somebody's profile from the Followers / Following pop-up closes the pop-up
 window.addEventListener("hashchange", function () { if (location.hash.indexOf("#user/") === 0) { closeStat(); } });
+
+
+/* =====================================================================
+   31. OTHER PEOPLE'S FOLLOWERS / FOLLOWING, AND TRENDING PEOPLE (tabs, ranks, details pop-up)
+   ===================================================================== */
+var viewedUser = null;                                   // the person whose profile page is open (#user/ID)
+function openUserStat(kind) {
+  if (!viewedUser) { return; }
+  statUser = viewedUser; openStatKind = kind;
+  openModal("statsModal");
+  renderStatModal();
+}
+[["uFollowers", "followers"], ["uFollowing", "following"]].forEach(function (pair) {
+  var cell = el(pair[0]).parentElement;
+  cell.classList.add("stat-link"); cell.setAttribute("role", "button"); cell.tabIndex = 0;
+  cell.title = "See the list";
+  cell.onclick = function () { openUserStat(pair[1]); };
+  cell.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openUserStat(pair[1]); } };
+});
+
+// ---------- Trending People: Today / This Week tabs, rank numbers, click for details ----------
+var peopleRange = peopleRange || "day", peopleToken = peopleToken || 0;     // (keeps the values if the first load already started)
+async function fillPeople(range) {
+  range = range || peopleRange || "day";               // (this runs once before the lines below set their values)
+  var row = el("peopleRow"), token = peopleToken = (peopleToken || 0) + 1;
+  try {
+    var response = await fetch(TMDB_URL + "/trending/person/" + range + "?api_key=" + TMDB_KEY);
+    if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
+    var data = await response.json();
+    if (token !== peopleToken) { return; }
+    var people = (data.results || []).filter(function (p) { return p.profile_path; }).slice(0, 12);
+    if (people.length === 0) { return; }
+    row.replaceChildren();
+    people.forEach(function (p, i) {
+      var box = document.createElement("div");
+      box.className = "person person-card";
+      box.dataset.personId = p.id;
+      box.dataset.personName = p.name;
+      box.setAttribute("role", "button"); box.tabIndex = 0;
+      box.title = "See " + p.name + "'s details";
+      var pic = document.createElement("div");
+      pic.className = "pic round has-image";
+      pic.style.backgroundImage = "url(" + PROFILE_URL + p.profile_path + ")";
+      var rank = document.createElement("span");
+      rank.className = "rank"; rank.textContent = i + 1;
+      pic.appendChild(rank);
+      var name = document.createElement("div");
+      name.className = "person-name"; name.textContent = p.name;
+      var job = document.createElement("small");
+      job.textContent = p.known_for_department || "";
+      var follow = document.createElement("button");
+      follow.className = "btn small follow-btn";
+      follow.dataset.name = p.name;
+      box.appendChild(pic); box.appendChild(name); box.appendChild(job); box.appendChild(follow);
+      row.appendChild(box);
+    });
+    row.scrollLeft = 0;
+    paintFollowButtons();
+    if (typeof updateAllArrows === "function") { updateAllArrows(); }
+  } catch (error) {
+    console.error("Could not load trending people:", error);
+  }
+}
+document.querySelectorAll("#peopleTabs .tab").forEach(function (tab) {
+  tab.onclick = function () {
+    document.querySelectorAll("#peopleTabs .tab").forEach(function (t) { t.classList.toggle("on", t === tab); });
+    peopleRange = tab.dataset.range;
+    el("peopleRow").replaceChildren(spinner());
+    fillPeople(peopleRange);
+  };
+});
+
+// Click a person: photo, short bio and the movies / shows they are known for
+async function openPersonDetail(id, name) {
+  var token = ++featToken;
+  openFeat(name, "Loading...");
+  var oldBtn = el("featFollow"); if (oldBtn) { oldBtn.remove(); }
+  try {
+    var response = await fetch(TMDB_URL + "/person/" + id + "?append_to_response=combined_credits&api_key=" + TMDB_KEY);
+    if (!response.ok) { throw new Error("TMDB answered with error " + response.status); }
+    var d = await response.json();
+    if (token !== featToken) { return; }
+    if (d.profile_path) { el("featPhoto").hidden = false; el("featPhoto").style.backgroundImage = "url(" + PROFILE_URL + d.profile_path + ")"; }
+    var bio = (d.biography || "").trim();
+    if (bio.length > 320) { bio = bio.slice(0, 317).replace(/\s+\S*$/, "") + "..."; }
+    var born = d.birthday ? "Born " + d.birthday.slice(0, 4) + (d.place_of_birth ? " in " + d.place_of_birth : "") : "";
+    el("featSub").textContent = [d.known_for_department, born, bio].filter(Boolean).join(" • ");
+    var follow = document.createElement("button");                       // follow this star from the pop-up
+    follow.id = "featFollow"; follow.className = "btn small follow-btn"; follow.dataset.name = d.name || name;
+    el("featSub").parentElement.appendChild(follow);
+    paintFollowButtons();
+
+    var credits = (d.combined_credits || {}), seen = {};
+    var known = (credits.cast || []).concat(credits.crew || []).filter(function (c) {
+      var k = c.media_type + "-" + c.id;
+      if (!c.poster_path || seen[k] || (c.media_type !== "movie" && c.media_type !== "tv")) { return false; }
+      seen[k] = true; return true;
+    }).sort(function (a, b) { return (b.vote_count || 0) - (a.vote_count || 0); }).slice(0, 18);
+    var grid = el("featGrid");
+    grid.replaceChildren();
+    if (known.length === 0) { featNote("No movies or shows found."); return; }
+    var heading = document.createElement("h3"); heading.style.width = "100%"; heading.textContent = "Known for";
+    grid.appendChild(heading);
+    known.forEach(function (m) { grid.appendChild(makeCard(m)); });
+  } catch (error) {
+    console.error("Could not load person:", error);
+    if (token === featToken) { el("featSub").textContent = ""; featNote("Sorry, the details could not be loaded. Check your internet connection."); }
+  }
+}
+function openPersonCard(box) { openPersonDetail(box.dataset.personId, box.dataset.personName); }
+document.addEventListener("click", function (e) {
+  if (e.target.closest(".follow-btn")) { return; }
+  var box = e.target.closest(".person-card");
+  if (box) { openPersonCard(box); }
+});
+document.addEventListener("keydown", function (e) {
+  if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("person-card")) { e.preventDefault(); openPersonCard(e.target); }
+});

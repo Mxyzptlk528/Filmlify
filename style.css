@@ -2409,3 +2409,96 @@ a[href^="#user/"]:hover {
         grid-template-columns: 1fr 1fr;
     }
 }
+
+
+/* =====================================================================
+   TRENDING PEOPLE: tabs, rank badges, hover
+   ===================================================================== */
+.tabs {
+    display: inline-flex;
+    gap: 6px;
+    margin-left: 12px;
+    vertical-align: middle;
+}
+
+.tab {
+    padding: 4px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    background: #1a2252;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.tab:hover {
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.tab.on {
+    color: #fff;
+    background: #444fa8;
+    border-color: #6f7bd8;
+}
+
+.person-card {
+    cursor: pointer;
+}
+
+.person-card .pic {
+    position: relative;
+    overflow: visible;
+    transition: transform 0.25s var(--ease), box-shadow 0.25s;
+}
+
+.person-card:hover .pic, .person-card:focus-visible .pic {
+    transform: scale(1.07);
+    box-shadow: 0 8px 22px #000000aa, 0 0 18px #7b82e855;
+}
+
+.person-card:hover .person-name {
+    color: #c9ceff;
+}
+
+.person .person-name {
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.person small {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.rank {
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    background: #444fa8;
+    border: 2px solid var(--panel);
+    border-radius: 14px;
+}
+
+.person:nth-child(-n+3) .rank {
+    background: #c99a1d;
+}
+
+/* Grids that should wrap onto new lines (Browse results, genre results, pop-up film lists) */
+.row.wrap {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: 18px;
+    scroll-snap-type: none;
+}
