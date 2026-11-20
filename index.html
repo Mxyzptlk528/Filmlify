@@ -82,9 +82,9 @@
   <div class="two">
     <section class="block"><h2>Top News</h2>
       <!-- Each news picture comes from TMDB: data-title = a movie/show poster, data-person = a person's photo -->
-      <div class="item with-pic"><div class="pic tall" data-person="Inde Navarrette"></div><b>'Obsession' Star Inde Navarrette Receives IMDb Breakout Award</b></div>
-      <div class="item with-pic"><div class="pic tall" data-title="Monster: The Lizzie Borden Story"></div><b>Netflix's 'Monster' Delivers an Engaging Season</b></div>
-      <div class="item with-pic"><div class="pic tall" data-title="Spider-Man: Brand New Day"></div><b>'Spider-Man: Brand New Day' Becomes Highest-Grossing Opener</b></div>
+      <div class="item with-pic clickable news-item" role="button" tabindex="0" data-kind="person" data-subject="Inde Navarrette" data-source="Filmlify News"><div class="pic tall" data-person="Inde Navarrette"></div><b>'Obsession' Star Inde Navarrette Receives IMDb Breakout Award</b></div>
+      <div class="item with-pic clickable news-item" role="button" tabindex="0" data-kind="tv" data-subject="Monster: The Lizzie Borden Story" data-source="Filmlify News"><div class="pic tall" data-title="Monster: The Lizzie Borden Story"></div><b>Netflix's 'Monster' Delivers an Engaging Season</b></div>
+      <div class="item with-pic clickable news-item" role="button" tabindex="0" data-kind="movie" data-subject="Spider-Man: Brand New Day" data-source="Filmlify News"><div class="pic tall" data-title="Spider-Man: Brand New Day"></div><b>'Spider-Man: Brand New Day' Becomes Highest-Grossing Opener</b></div>
     </section>
     <section class="block"><h2>Trending People <span class="tabs" id="peopleTabs"><button type="button" class="tab on" data-range="day">Today</button><button type="button" class="tab" data-range="week">This Week</button></span></h2><div class="row people" id="peopleRow">
       <!-- These are shown until TMDB sends the real trending people -->
@@ -569,6 +569,29 @@
     <div id="mReviews"></div>
   </div>
 </div>
+
+<!-- ===================== NEWS STORY POP-UP ===================== -->
+<div class="modal" id="newsModal"><div class="modal-box news-box">
+  <span class="news-tag" id="newsTag">Top story</span>
+  <h2 id="newsTitle"></h2>
+  <p class="news-meta" id="newsMeta"></p>
+  <div class="news-about" id="newsAbout">
+    <div class="news-pic" id="newsPic"></div>
+    <div class="news-about-text">
+      <small id="newsAboutLabel"></small>
+      <h3 id="newsAboutTitle"></h3>
+      <p class="news-facts" id="newsFacts"></p>
+      <p id="newsAboutText"></p>
+    </div>
+  </div>
+  <div class="news-actions">
+    <button class="btn" id="newsOpen" type="button">See details</button>
+    <button class="btn outline" id="newsShare" type="button">Share headline</button>
+  </div>
+  <h3 class="news-more-title">More headlines</h3>
+  <div id="newsMore"></div>
+  <button class="btn outline wide" id="newsClose" type="button">Close</button>
+</div></div>
 
 <!-- ===================== LIST POP-UP (Home lists and TV community lists) ===================== -->
 <div class="modal" id="listModal"><div class="modal-box">

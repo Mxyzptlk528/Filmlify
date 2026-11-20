@@ -2293,7 +2293,7 @@ function setupModal(id, close) {
 }
 document.addEventListener("keydown", function (e) {            // Escape closes only the top-most pop-up
   if (e.key !== "Escape") { return; }
-  var order = ["pickModal", "editReviewModal", "editProfileModal", "statsModal", "clModal", "featModal", "listModal"];
+  var order = ["pickModal", "editReviewModal", "editProfileModal", "statsModal", "newsModal", "clModal", "featModal", "listModal"];
   for (var i = 0; i < order.length; i++) {
     if (el(order[i]).classList.contains("open")) { e.stopImmediatePropagation(); modalClosers[order[i]](); return; }
   }
@@ -3333,3 +3333,96 @@ document.addEventListener("click", function (e) {
 document.addEventListener("keydown", function (e) {
   if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("person-card")) { e.preventDefault(); openPersonCard(e.target); }
 });
+
+
+/* =====================================================================
+   32. TOP NEWS: click a headline for a story pop-up
+   ===================================================================== */
+// The headlines live in index.html (class "news-item"). Each one says what it is about:
+//   data-kind="person" | "movie" | "tv"   and   data-subject="the name to look up on TMDB"
+// The pop-up shows the headline plus real details about that person, movie or show from TMDB.
+var newsIndex = 0, newsToken = 0;
+function newsItems() { return Array.from(document.querySelectorAll(".news-item")); }
+function closeNews() { newsToken++; closeModal("newsModal"); }
+async function openNews(index) {
+  var items = newsItems(), item = items[index], token = ++newsToken;
+  if (!item) { return; }
+  newsIndex = index;
+  var headline = item.querySelector("b").textContent, kind = item.dataset.kind, subject = item.dataset.subject;
+  el("newsTag").textContent = kind === "person" ? "People news" : kind === "tv" ? "TV news" : "Movie news";
+  el("newsTitle").textContent = headline;
+  el("newsMeta").textContent = (item.dataset.source || "Filmlify News") + " • Top story";
+  el("newsPic").style.backgroundImage = "";
+  el("newsAboutLabel").textContent = "About this story";
+  el("newsAboutTitle").textContent = subject;
+  el("newsFacts").textContent = "";
+  el("newsAboutText").replaceChildren(spinner());
+  el("newsOpen").hidden = true;
+
+  var more = el("newsMore");                                       // the other headlines, to jump between stories
+  more.replaceChildren();
+  items.forEach(function (other, i) {
+    if (i === index) { return; }
+    var row = document.createElement("div");
+    row.className = "item clickable";
+    row.setAttribute("role", "button"); row.tabIndex = 0;
+    var text = document.createElement("span"); text.textContent = other.querySelector("b").textContent;
+    row.appendChild(text);
+    row.onclick = function () { openNews(i); };
+    row.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openNews(i); } };
+    more.appendChild(row);
+  });
+  openModal("newsModal");
+  el("newsModal").querySelector(".modal-box").scrollTop = 0;
+
+  try {
+    if (kind === "person") {
+      var person = await searchPerson(subject);
+      if (token !== newsToken) { return; }
+      if (!person) { throw new Error("person not found"); }
+      var d = await (await fetch(TMDB_URL + "/person/" + person.id + "?api_key=" + TMDB_KEY)).json();
+      if (token !== newsToken) { return; }
+      el("newsPic").style.backgroundImage = d.profile_path ? "url(" + PROFILE_URL + d.profile_path + ")" : "";
+      el("newsAboutTitle").textContent = d.name || subject;
+      el("newsFacts").textContent = [d.known_for_department, d.birthday ? "Born " + d.birthday.slice(0, 4) : ""].filter(Boolean).join(" • ");
+      var bio = (d.biography || "").trim();
+      if (bio.length > 340) { bio = bio.slice(0, 337).replace(/\s+\S*$/, "") + "..."; }
+      el("newsAboutText").textContent = bio || "No biography available yet.";
+      el("newsOpen").textContent = "See " + (d.name || subject);
+      el("newsOpen").onclick = function () { closeNews(); openPersonDetail(person.id, d.name || subject); };
+    } else {
+      var found = await searchTMDB(subject);
+      if (token !== newsToken) { return; }
+      if (!found) { throw new Error("title not found"); }
+      remember(found);
+      el("newsPic").style.backgroundImage = found.poster_path ? "url(" + POSTER_URL + found.poster_path + ")" : "";
+      el("newsAboutTitle").textContent = nameOf(found);
+      el("newsFacts").textContent = [(found.media_type === "tv" ? "TV Show" : "Movie"), yearOf(found), found.vote_average ? "★ " + found.vote_average.toFixed(1) : "",
+                                     genreNames(found).slice(0, 3).join(", ")].filter(Boolean).join(" • ");
+      var story = (found.overview || "").trim();
+      if (story.length > 340) { story = story.slice(0, 337).replace(/\s+\S*$/, "") + "..."; }
+      el("newsAboutText").textContent = story || "No description available yet.";
+      el("newsOpen").textContent = "Open " + nameOf(found);
+      el("newsOpen").onclick = function () { closeNews(); openMovie(found); };
+    }
+    el("newsOpen").hidden = false;
+  } catch (error) {
+    if (token !== newsToken) { return; }
+    el("newsPic").style.backgroundImage = "";
+    el("newsAboutTitle").textContent = subject;
+    el("newsAboutText").textContent = "Could not load the details. Check your internet connection.";
+  }
+}
+newsItems().forEach(function (item, i) {
+  item.onclick = function () { openNews(i); };
+  item.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openNews(i); } };
+});
+el("newsClose").onclick = closeNews;
+setupModal("newsModal", closeNews);
+el("newsShare").onclick = async function () {
+  var text = el("newsTitle").textContent, link = location.href.split("#")[0];
+  try {
+    if (navigator.share) { await navigator.share({ title: "Filmlify", text: text, url: link }); }
+    else { await navigator.clipboard.writeText(text + " — " + link); showMessage("Headline copied!"); }
+  } catch (e) { /* the share sheet was closed */ }
+};
